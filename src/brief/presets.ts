@@ -3,7 +3,7 @@ import { customers, orderById } from "@/domain/catalog/orders";
 import { personById } from "@/domain/catalog/people";
 import { plantByCode } from "@/domain/catalog/plants";
 import type { Snapshot } from "@/domain/types";
-import { day } from "@/lib/format";
+import { day, lowerFirst } from "@/lib/format";
 import { visibleOrders } from "@/live/selectors";
 import { boardSupplies, coverLabel, importSupply, longHaulTrucks, weeks } from "@/live/supply";
 import type { Answer, Block, Tone } from "./answer";
@@ -207,7 +207,7 @@ const call: Preset = {
     const relevant = [...unacked, ...stops.filter((s) => s.acknowledged && s.orderId && s.openMinutes >= 30)].slice(0, 4);
     const lead = personById[people[0].personId];
     return {
-      headline: `Start with ${lead.name}: ${people[0].reason.charAt(0).toLowerCase()}${people[0].reason.slice(1)}.`,
+      headline: `Start with ${lead.name}: ${lowerFirst(people[0].reason)}.`,
       tone: unacked.length ? "bad" : "watch",
       blocks: [
         { type: "people", items: people },
@@ -297,13 +297,13 @@ const supply: Preset = {
         ? `Imported LED parts cover ${weeks(imports.coverWeeks)} of what Bawal's SMT lines use.`
         : "None of your schedules fit LED boards from Bawal."
       : worst.health === "behind"
-        ? `${where(worst)} has run out of ${worst.name.charAt(0).toLowerCase()}${worst.name.slice(1)}; ${worst.userId} waits for the next truck from Bawal.`
+        ? `${where(worst)} has run out of ${lowerFirst(worst.name)}; ${worst.userId} waits for the next truck from Bawal.`
         : worst.health === "at-risk"
           ? `${where(worst)} has ${coverLabel(worst.coverHours)} of boards left, less than the time to its next truck.`
           : `Every lamp line has boards until its next truck${imports ? `, and imported parts cover ${weeks(imports.coverWeeks)}` : ""}.`;
     const ids = [...new Set(short.flatMap((b) => [b.userId, b.supplierId]))];
     const people = [
-      ...short.map((b) => ({ personId: plantByCode[b.plant].managerId, reason: `Runs ${where(b)}, ${coverLabel(b.coverHours)} of boards on hand` })),
+      ...short.map((b) => ({ personId: plantByCode[b.plant].managerId, reason: `Runs ${where(b)}, ${b.onHand > 0 ? `${coverLabel(b.coverHours)} of boards on hand` : "out of boards"}` })),
       ...(short.length ? [{ personId: orderById[short[0].supplierId].leadEngineerId, reason: "Plans board builds and trucks at Bawal Electronics" }] : []),
       ...short.map((b) => ({ personId: orderById[b.userId].leadEngineerId, reason: `Leads ${b.userId} ${orderById[b.userId].title}` })),
     ].filter((p, k, all) => personById[p.personId] && all.findIndex((q) => q.personId === p.personId) === k);
@@ -335,7 +335,7 @@ const supply: Preset = {
       headline,
       tone: short.some((b) => b.health === "behind") ? "bad" : short.length || held.length ? "watch" : "good",
       summary: held.length
-        ? `${held.map((t) => `The truck to ${plantByCode[t.to].name} is ${t.delay!.hours} h late: ${t.delay!.reason.charAt(0).toLowerCase()}${t.delay!.reason.slice(1)}.`).join(" ")}`.slice(0, 320)
+        ? held.map((t) => `The truck to ${plantByCode[t.to].name} is ${t.delay!.hours} h late: ${lowerFirst(t.delay!.reason)}.`).join(" ").slice(0, 320)
         : undefined,
       blocks,
       followUps: ["What is holding up the ADB boards at Bawal?", "When does the next truck reach Sanand II?", "What's at risk this week?"],

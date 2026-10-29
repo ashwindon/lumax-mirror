@@ -10,7 +10,6 @@ import type { SprintHealth } from "./sprint";
 // LED packages, driver ICs and connectors Bawal builds them from.
 
 const HOUR = 3_600_000;
-const WEEK = 7 * 24 * HOUR;
 
 type Feed = Pick<Snapshot, "now" | "shipments" | "docks" | "stocks" | "imports" | "sprint">;
 

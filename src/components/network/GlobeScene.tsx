@@ -103,7 +103,7 @@ function Land() {
   // Dot size is set in world units, so it shrinks with distance like the rest of the globe.
   useEffect(() => {
     dotMaterial.uniforms.uScale.value = (size.height * dpr) / (2 * Math.tan(THREE.MathUtils.degToRad(fov) / 2));
-    dotMaterial.uniforms.uMaxPx.value = 7 * dpr;
+    dotMaterial.uniforms.uMaxPx.value = 4.5 * dpr;
   }, [size.height, dpr, fov]);
   return <points geometry={geometry} material={dotMaterial} />;
 }
@@ -359,7 +359,7 @@ function Pilot({ flightRef }: { flightRef: RefObject<Flight | null> }) {
 
 /** How far back the resting view sits: narrow screens need a little more room for India and the lane east. */
 function homeDistance(aspect: number) {
-  return GLOBE_R * 3.4 * Math.min(1.6, Math.max(1, (1.4 / aspect) ** 0.35));
+  return GLOBE_R * 3.9 * Math.min(1.6, Math.max(1, (1.4 / aspect) ** 0.35));
 }
 
 function Scene({

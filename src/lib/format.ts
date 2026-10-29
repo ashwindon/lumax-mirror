@@ -50,6 +50,9 @@ export const dayTime = (ms: number) => weekdayTime.format(ms);
 /** "12,400" in the Indian grouping Lumax reports in ("1,28,000" for a lakh and more). */
 export const num = (n: number) => Math.round(n).toLocaleString("en-IN");
 
+/** Lower-cases the first letter to run a phrase into a sentence, leaving acronyms like "ADB" alone. */
+export const lowerFirst = (s: string) => (/^[A-Z]{2}/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1));
+
 /** "1 order", "3 orders", "2,400 headlamps". */
 export function count(n: number, singular: string, plural = `${singular}s`) {
   return `${num(n)} ${n === 1 ? singular : plural}`;

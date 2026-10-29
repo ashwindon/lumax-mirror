@@ -51,10 +51,10 @@ export const regionMaps: Record<RegionId, RegionMap> = {
     ],
     oems: [{ name: "Maruti Suzuki, Manesar and Gurugram, to the north", at: [-1, 10.8] }],
     gateways: [
-      { at: [15.5, 11.5], name: "To Delhi and Uttarakhand", note: "Haridwar and Pantnagar overnight", regions: ["uttarakhand"] },
-      { at: [-15, -11], name: "NH-48 south", note: "Sanand 2 days, Pune 3, Bengaluru 4 to 5", regions: ["gujarat", "pune", "karnataka"] },
+      { at: [14.2, 10.4], name: "To Delhi and Uttarakhand", note: "Haridwar and Pantnagar overnight", regions: ["uttarakhand"] },
+      { at: [-13.6, -10.1], name: "NH-48 south", note: "Sanand 2 days, Pune 3, Bengaluru 4 to 5", regions: ["gujarat", "pune", "karnataka"] },
     ],
-    camera: [0, 70, 58],
+    camera: [0, 78, 65],
     target: [0, 0, 0],
     shadowExtent: 44,
     minDistance: 20,
@@ -68,7 +68,7 @@ export const regionMaps: Record<RegionId, RegionMap> = {
       // Haridwar, Najibabad, Kashipur, Rudrapur, Pantnagar
       { major: true, path: [[-66.9, 52.2], [-50, 35], [-38.8, 16.6], [-30, -2.2], [0, -15], [21.3, -27.8], [45, -40], [64, -53.4], [66.9, -52.2]] },
       // Haridwar to Roorkee and Delhi
-      { path: [[-66.9, 52.2], [-75, 47], [-80, 32]] },
+      { path: [[-66.9, 52.2], [-72, 42], [-72, 30], [-80, 22]] },
       // Kashipur to Moradabad and Delhi
       { path: [[21.3, -27.8], [10, -45], [2.9, -66]] },
     ],
@@ -86,10 +86,10 @@ export const regionMaps: Record<RegionId, RegionMap> = {
       { name: "Tata Motors, Pantnagar", at: [52, -42] },
     ],
     gateways: [
-      { at: [-80, 30], name: "From Bawal via Delhi", note: "Boards overnight, about 300 km", regions: ["ncr"], plants: ["HDW"] },
+      { at: [-72, 30], name: "From Bawal via Delhi", note: "Boards overnight, about 300 km", regions: ["ncr"], plants: ["HDW"] },
       { at: [2.9, -66], name: "From Bawal via Moradabad", note: "Boards overnight, about 380 km", regions: ["ncr"], plants: ["PNT"] },
     ],
-    camera: [0, 72, 58],
+    camera: [0, 81, 65],
     target: [0, 0, 0],
     shadowExtent: 44,
     minDistance: 20,
@@ -105,7 +105,7 @@ export const regionMaps: Record<RegionId, RegionMap> = {
       // Chakan–Talegaon road through Mahalunge Ingle and past Sawardari
       { path: [[6.3, 6.7], [0.95, 6], [-1.9, 6.3], [-6, 5.5], [-10.9, 4.2]] },
       // Old Mumbai–Pune highway through Chinchwad
-      { major: true, path: [[3.5, -10.3], [0.3, -7.6], [-4, -4.6], [-8, -1.5], [-10.9, 1.5]] },
+      { major: true, path: [[3.5, -10.3], [0.3, -7.6], [-4, -4.6], [-8.6, -0.2], [-10.9, 1.5]] },
       // Dehu to Alandi
       { path: [[-3.6, 2], [2, 1], [10.2, -2.6]] },
     ],
@@ -128,8 +128,8 @@ export const regionMaps: Record<RegionId, RegionMap> = {
       { name: "Skoda Auto Volkswagen, Chakan", at: [7.2, 9.7] },
       { name: "Tata Motors, Pimpri", at: [-1.2, -10] },
     ],
-    gateways: [{ at: [-10.9, 1.5], name: "NH-48 from Bawal", note: "Boards 3 days by road, via Ahmedabad and Mumbai", regions: ["ncr"] }],
-    camera: [0, 80, 64],
+    gateways: [{ at: [-8.6, -0.2], name: "NH-48 from Bawal", note: "Boards 3 days by road, via Ahmedabad and Mumbai", regions: ["ncr"] }],
+    camera: [0, 90, 72],
     target: [0, 0, 1],
     shadowExtent: 50,
     minDistance: 24,
@@ -159,7 +159,7 @@ export const regionMaps: Record<RegionId, RegionMap> = {
       { name: "Suzuki Motor Gujarat, Hansalpur (60 km north-west)", at: [-5.5, -6.4] },
     ],
     gateways: [{ at: [10, -2.6], name: "NH-48 from Bawal", note: "Boards 2 days by road, via Jaipur and Udaipur", regions: ["ncr"] }],
-    camera: [0, 74, 60],
+    camera: [0, 83, 67],
     target: [0, 0, 0],
     shadowExtent: 46,
     minDistance: 20,
@@ -194,7 +194,7 @@ export const regionMaps: Record<RegionId, RegionMap> = {
         sheds: [{ w: 8, d: 4 }],
       },
     ],
-    camera: [0, 70, 56],
+    camera: [0, 78, 63],
     target: [0, 0, 0],
     shadowExtent: 42,
     minDistance: 20,

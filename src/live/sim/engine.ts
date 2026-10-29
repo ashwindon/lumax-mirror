@@ -1,6 +1,6 @@
 import { machines, runsStep } from "@/domain/catalog/machines";
 import { orderById, orders, stockById, stocks, workOrders } from "@/domain/catalog/orders";
-import { plantByCode, sameRegion } from "@/domain/catalog/plants";
+import { sameRegion } from "@/domain/catalog/plants";
 import { chronicTroubles, faultProfiles, genericMajorFault, type ChronicTrouble, type FaultCause, type FaultProfile } from "@/domain/faults";
 import { IMPORT_ON_HAND_WEEKS, importLot, importSailings, nextDeparture, roadDelay, transitMs } from "@/domain/freight";
 import { lineId, planWeek } from "@/domain/planning";
@@ -35,16 +35,18 @@ const ALERT_HISTORY_MS = 12 * HOUR;
 /** Work-in-progress cap per order, in batches. New batches are released as old ones finish. */
 const WIP_BATCHES = 4;
 /** OEM call-offs arrive daily, so a week's schedule is released evenly, this far ahead of an even pace. */
-const RELEASE_AHEAD = 0.04;
+const RELEASE_AHEAD = 0.01;
 /**
  * Plants level-load to the schedule: a step runs at most this far ahead of an even
  * week, and the machine spends spare time on other programmes instead of building stock.
+ * Presses, metallizers and SMT lines run in campaigns instead, held back only by what
+ * has been released.
  */
 const LEVEL_AHEAD = 0.025;
 /** Chance per step that an idle machine with nothing queued picks up another programme's work. */
-const OTHER_WORK_CHANCE = 0.006;
-/** A machine that serves a tracked schedule waits this long for it before taking other work. */
-const OTHER_WORK_AFTER_MS = 30 * MIN;
+const OTHER_WORK_CHANCE = 0.02;
+/** A machine that serves a tracked schedule waits this long for it before taking a short other job. */
+const OTHER_WORK_AFTER_MS = 2 * MIN;
 /** Stops at least this long get pinned on burndown charts. */
 const MARKER_MIN_MS = 25 * MIN;
 const MAX_MARKERS = 400;
@@ -658,6 +660,7 @@ export class PlantSimulation {
     let best: { woId: string; op: number; score: number; slack: number } | undefined;
     let starved: MachineRuntime["starved"];
     let held = false;
+    const campaigns = !!faultProfiles[m.def.kind].setup?.campaignMin;
 
     for (const { orderId, opIndex } of stepsFor.get(m.def.id) ?? []) {
       const woId = (this.wosByOrder.get(orderId) ?? []).find((id) => this.wos[id].queued[opIndex] > 0);
@@ -669,7 +672,7 @@ export class PlantSimulation {
       }
       const line = this.lineById.get(lineId(orderId, opIndex));
       const current = t < m.campaignUntil && m.lastJobKey === `${orderId}:${opIndex}`;
-      if (line && this.lineDone[line.id] >= line.units * Math.min(1, (t - this.weekStart) / WEEK + LEVEL_AHEAD)) {
+      if (!campaigns && line && this.lineDone[line.id] >= line.units * Math.min(1, (t - this.weekStart) / WEEK + LEVEL_AHEAD)) {
         // Ahead of plan: a press mid-campaign waits with its mould in rather than changing it.
         held ||= current;
         continue;
@@ -706,8 +709,11 @@ export class PlantSimulation {
   private otherJob(m: MachineRuntime, t: number): Job | undefined {
     const work = otherWorkFor(m.def);
     if (!work || this.rng() > OTHER_WORK_CHANCE) return undefined;
-    if (stepsFor.get(m.def.id)?.length && (m.status !== "waiting" || t - m.since < OTHER_WORK_AFTER_MS)) return undefined;
-    return { label: work.label, op: 0, unit: 0, cycleMs: between(this.rng, work.minutes) * MIN, progress: 0 };
+    const tracked = !!stepsFor.get(m.def.id)?.length;
+    if (tracked && (m.status !== "waiting" || t - m.since < OTHER_WORK_AFTER_MS)) return undefined;
+    // Between tracked jobs, keep other work short so the schedule never waits long behind it.
+    const minutes: [number, number] = tracked ? [Math.min(work.minutes[0], 20), Math.min(work.minutes[1], 50)] : work.minutes;
+    return { label: work.label, op: 0, unit: 0, cycleMs: between(this.rng, minutes) * MIN, progress: 0 };
   }
 
   private complete(m: MachineRuntime, t: number) {

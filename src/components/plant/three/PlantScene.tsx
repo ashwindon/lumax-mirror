@@ -50,7 +50,7 @@ export default function PlantScene({ code, labels }: { code: PlantCode; labels: 
   const layout = useMemo(() => plantLayout(code), [code]);
   const list = machinesByPlant[code] ?? [];
   const selectMachine = useTwin((s) => s.selectMachine);
-  const reach = layout.width * 0.55 + 22;
+  const reach = layout.width * 0.62 + 24;
 
   return (
     <Stage

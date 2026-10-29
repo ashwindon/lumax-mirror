@@ -75,7 +75,7 @@ export const faultProfiles: Record<MachineKind, FaultProfile> = {
       quality("Flash on housing parting line", "QM-11", "Flash along the parting line on the last shots; parts held and the mould face being cleaned."),
       quality("Weld lines on outer lens", "QM-14", "Visible weld line near the gate on the outer lens; held until melt temperature is corrected."),
     ]),
-    setup: mouldChange([25, 50], 360),
+    setup: mouldChange([18, 40], 360),
     major: breakdown(
       "Mould damage: sent to the tool room",
       "MD-01",
@@ -89,7 +89,7 @@ export const faultProfiles: Record<MachineKind, FaultProfile> = {
       quality("Bubbles in light guide", "QM-19", "Air traps showing in the light guide; shots held while the venting is checked."),
       quality("Sink marks on reflector", "QM-07", "Sink marks on the thick section; parts held for the quality engineer."),
     ]),
-    setup: mouldChange([15, 35], 300),
+    setup: mouldChange([12, 28], 300),
   },
   "imm-2k": {
     breakdown: { meanHours: 260, minutes: [20, 60], causes: pressBreakdowns },

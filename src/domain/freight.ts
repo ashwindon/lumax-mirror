@@ -48,7 +48,7 @@ export function nextDeparture(from: PlantCode, to: PlantCode, t: number) {
 
 /** Things that hold a long-haul truck on Indian highways. */
 const roadHolds = [
-  "Held at a state border check post: the e-way bill did not match the invoice",
+  "Held at a state border check post because the e-way bill did not match the invoice",
   "Tractor unit broke down; the transporter is sending a replacement",
   "Diverted around a closed stretch of NH-48",
   "Stopped for a GST inspection; papers being verified",

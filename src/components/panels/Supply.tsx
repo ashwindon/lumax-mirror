@@ -3,7 +3,7 @@
 import { orderById } from "@/domain/catalog/orders";
 import { plantByCode } from "@/domain/catalog/plants";
 import { IMPORT_COVER_WEEKS, importLegs, type ImportLeg } from "@/domain/freight";
-import { count, day, dayTime, num } from "@/lib/format";
+import { count, day, dayTime, lowerFirst, num } from "@/lib/format";
 import {
   boardSupplies,
   boardSupply,
@@ -48,7 +48,7 @@ export function CoverBand({ value, band, max, health }: { value: number; band: [
 }
 
 const truckNote = (t: Pick<Truck, "arriveAt" | "delay">) =>
-  `arrives ${dayTime(t.arriveAt)}${t.delay ? `, ${t.delay.hours} h late: ${t.delay.reason.charAt(0).toLowerCase()}${t.delay.reason.slice(1)}` : ""}`;
+  `arrives ${dayTime(t.arriveAt)}${t.delay ? `, ${t.delay.hours} h late: ${lowerFirst(t.delay.reason)}` : ""}`;
 
 function BoardRow({ b }: { b: BoardSupply }) {
   const plant = plantByCode[b.plant];

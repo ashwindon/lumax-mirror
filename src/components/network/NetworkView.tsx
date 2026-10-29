@@ -158,9 +158,9 @@ function GlobeLabels() {
   const focus = selection?.kind === "supply" ? selection.focus : undefined;
   const focusLot = imports?.lots.find((l) => l.id === focus);
   const focusTruck = trucks.find((t) => t.key === focus);
-  const laneAt = along(seaLane, 0.5);
-  const india = latLon(23, 88, 0.4);
-  const roads = latLon(15.5, 70, 0.4);
+  const laneAt = along(seaLane, 0.42);
+  const india = latLon(25, 52, 0.4);
+  const roads = latLon(5, 61, 0.4);
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
       <ScreenLabel board={labels} id="india" at={india} facing={india.clone().normalize()} inward>
@@ -245,7 +245,7 @@ function GlobeLabels() {
           </button>
         </ScreenLabel>
       ) : null}
-      {contextPins.map((p) => (
+      {contextPins.filter((p) => p.kind !== "port").map((p) => (
         <ScreenLabel key={p.id} board={labels} id={`pin:${p.id}`} at={latLon(p.lat, p.lon, 0.22)} facing={latLon(p.lat, p.lon).normalize()} inward>
           <span className="flex flex-col rounded-lg border border-line bg-panel/90 px-2 py-0.5 text-[11px] whitespace-nowrap shadow-sm max-sm:hidden">
             <span className="font-semibold">{p.name}</span>
