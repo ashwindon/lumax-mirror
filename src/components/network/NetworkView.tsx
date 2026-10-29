@@ -159,11 +159,11 @@ function GlobeLabels() {
   const focusLot = imports?.lots.find((l) => l.id === focus);
   const focusTruck = trucks.find((t) => t.key === focus);
   const laneAt = along(seaLane, 0.42);
-  const india = latLon(25, 52, 0.4);
-  const roads = latLon(5, 61, 0.4);
+  const india = latLon(17, 62, 0.4);
+  const roads = latLon(-2, 75, 0.4);
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <ScreenLabel board={labels} id="india" at={india} facing={india.clone().normalize()} inward>
+      <ScreenLabel board={labels} id="india" at={india} facing={india.clone().normalize()}>
         <div className="pointer-events-auto flex flex-col rounded-xl border border-line bg-panel-strong px-3 py-2 shadow-sm">
           <span className="text-[13px] font-semibold whitespace-nowrap">India · {count(plants.length, "plant")} in 5 clusters</span>
           <ul className="mt-1 flex flex-col">

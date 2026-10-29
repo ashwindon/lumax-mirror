@@ -113,7 +113,7 @@ export function OrderDetail({
             {customerById[order.customerId].name}, {num(order.quantity)} {order.unitName.toLowerCase()}s due {dueDate(order.dueInDays, snap.sprint.weekStart)}
           </p>
         </div>
-        {onBack ? <TextButton onClick={onBack}>All orders</TextButton> : null}
+        {onBack ? <TextButton onClick={onBack}>All schedules</TextButton> : null}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -173,7 +173,7 @@ export function OrderDetail({
 
       {alerts.length ? (
         <div className="border-t border-line pt-3">
-          <Label>Holding this order up</Label>
+          <Label>Holding this schedule up</Label>
           <ul className="mt-1">
             {alerts.map((a) => (
               <AlertRow key={a.id} alert={a} now={snap.now} onShow={onShowAlert} />

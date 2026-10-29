@@ -229,7 +229,7 @@ export function SprintBoard() {
     .sort((a, b) => healthRank[a.progress.health] - healthRank[b.progress.health] || a.order.dueInDays - b.order.dueInDays);
   const lines = visibleLines(snap, scope);
   const title =
-    scope.user.role === "executive" ? "All plants this week" : scope.user.role === "plant-manager" ? "Your plant this week" : "Your orders this week";
+    scope.user.role === "executive" ? "All plants this week" : scope.user.role === "plant-manager" ? "Your plant this week" : "Your schedules this week";
 
   return (
     <div className="absolute inset-0 scroller overflow-y-auto px-4 pt-[84px] pb-6">
@@ -238,8 +238,8 @@ export function SprintBoard() {
           <Panel className="flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3">
             <div>
               <h1 className="font-stretch-semi-expanded text-[19px] font-semibold">Sprint board</h1>
-              <p className="text-[12px] text-muted">Each order runs left to right through its route. The plan resets every Monday at 06:00.</p>
-              <p className="mt-1 text-[12px] text-ink">Open an order to see it on the map, a step to open its plant, or a red stop to go to the machine.</p>
+              <p className="text-[12px] text-muted">Each schedule runs left to right through its route. The plan resets every Monday at 06:00.</p>
+              <p className="mt-1 text-[12px] text-ink">Open a schedule to see it on the map, a step to open its plant, or a red stop to go to the machine.</p>
             </div>
             <ul className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-muted">
               <li className="flex items-center gap-1.5">
