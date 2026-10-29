@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --color-page: var(--page);
+  --color-panel: var(--panel);
+  --color-panel-strong: var(--panel-strong);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-run: var(--run);
+  --color-idle: var(--idle);
+  --color-stop: var(--stop);
+  --shadow-panel: var(--panel-shadow);
+}
+
+/* "Scale model" look: matte white model, colour only for the work and for problems. */
+:root {
+  --page: #e2e6e9;
+  /* Near-opaque instead of frosted: blurring a live 3D canvas behind every panel costs
+     a full re-blur each frame, which made the scenes and panel scrolling stutter. */
+  --panel: rgb(255 255 255 / 0.93);
+  --panel-strong: rgb(255 255 255 / 0.96);
+  --line: rgb(28 33 38 / 0.1);
+  --ink: #1c2126;
+  --muted: #5a626b;
+  --faint: #8a929b;
+  --accent: #00a86b;
+  --run: #00a86b;
+  --idle: #b57e00;
+  --stop: #d63a3f;
+  /* A tight blur: large soft shadows are slow to paint, and every panel has one. */
+  --panel-shadow: 0 1px 2px rgb(20 26 32 / 0.06), 0 8px 22px -10px rgb(20 26 32 / 0.24);
+  /* Chart steps: a darker accent for contrast on white, a recessive reference gray, neutral loss bars. */
+  --chart-actual: #008a58;
+  --chart-ref: #a3acb6;
+  --chart-loss: #6b7682;
+  --chart-grid: rgb(28 33 38 / 0.08);
+}
+
+html,
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+/*
+ * A stack of HUD panels down one side of a 3D view. When the panels are taller
+ * than the screen the whole column scrolls, so nothing is ever cut off. It stays
+ * click-through, so the empty space below short columns still orbits the scene.
+ * It sits in the components layer so utilities such as `max-xl:hidden` still win.
+ */
+@layer components {
+  /*
+   * Every scrolling box gets its own compositor layer. Chrome only scrolls a box on
+   * the GPU when it can, and transparent boxes over the 3D canvas otherwise fall back
+   * to repainting their whole content on every scroll step, which is what made the
+   * panels judder. With a layer, scrolling just moves pixels already painted.
+   */
+  .scroller,
+  .hud-column {
+    will-change: transform;
+  }
+  .hud-column {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    gap: 0.75rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--chart-ref) transparent;
+  }
+  .hud-column > * {
+    flex-shrink: 0;
+  }
+}
+
+/* Units on a truck between plants, drifting along the connector on the sprint board.
+   Animates only transform, so it never triggers layout or repaints the page. */
+@keyframes travel {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.travel {
+  animation: travel 3.3s linear infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .travel {
+    animation: none;
+  }
+}
