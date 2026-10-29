@@ -42,7 +42,22 @@ const weekdayDate = new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "n
 /** "Thu, 22 Oct", for days and weeks ahead. */
 export const day = (ms: number) => weekdayDate.format(ms);
 
-/** "1 order", "3 orders". */
+const weekdayTime = new Intl.DateTimeFormat("en-IN", { weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" });
+
+/** "Thu 16:00", for arrivals in the next few days. */
+export const dayTime = (ms: number) => weekdayTime.format(ms);
+
+/** "12,400" in the Indian grouping Lumax reports in ("1,28,000" for a lakh and more). */
+export const num = (n: number) => Math.round(n).toLocaleString("en-IN");
+
+/** "1 order", "3 orders", "2,400 headlamps". */
 export function count(n: number, singular: string, plural = `${singular}s`) {
-  return `${n} ${n === 1 ? singular : plural}`;
+  return `${num(n)} ${n === 1 ? singular : plural}`;
+}
+
+/** "₹2.4 crore", "₹38 lakh": rupee amounts the way Indian finance teams say them. */
+export function rupees(n: number) {
+  if (n >= 1e7) return `₹${(n / 1e7).toFixed(n >= 1e8 ? 0 : 1)} crore`;
+  if (n >= 1e5) return `₹${Math.round(n / 1e5)} lakh`;
+  return `₹${num(n)}`;
 }

@@ -1,4 +1,4 @@
-import { machineById, machines } from "./catalog/machines";
+import { machineById, machines, runsStep } from "./catalog/machines";
 import { orders, workOrderById } from "./catalog/orders";
 import { plants } from "./catalog/plants";
 import type { Alert, Person, PlantCode } from "./types";
@@ -25,7 +25,7 @@ export function scopeFor(user: Person): Scope {
       plants: new Set(plants.map((p) => p.code)),
       orders: new Set(orders.map((o) => o.id)),
       ownMachines,
-      summary: `all ${plants.length} plants and every order`,
+      summary: `all ${plants.length} plants and every schedule`,
     };
   }
 
@@ -36,17 +36,13 @@ export function scopeFor(user: Person): Scope {
       plants: mine,
       orders: new Set(orders.filter((o) => o.route.some((op) => mine.has(op.plant))).map((o) => o.id)),
       ownMachines,
-      summary: `${[...mine].join(", ")} and the orders that pass through it`,
+      summary: `${[...mine].join(", ")} and the schedules that pass through it`,
     };
   }
 
   // Lead engineers see the orders they lead, plus any order that runs on a machine they own.
   const ownCaps = [...ownMachines].map((id) => machineById[id]);
-  const myOrders = orders.filter(
-    (o) =>
-      o.leadEngineerId === user.id ||
-      o.route.some((op) => ownCaps.some((m) => m.plant === op.plant && m.capabilities.includes(op.capability))),
-  );
+  const myOrders = orders.filter((o) => o.leadEngineerId === user.id || o.route.some((op) => ownCaps.some((m) => runsStep(m, o.id, op))));
   const myPlants = new Set<PlantCode>([
     ...myOrders.flatMap((o) => o.route.map((op) => op.plant)),
     ...ownCaps.map((m) => m.plant),

@@ -7,8 +7,8 @@ export type Lens = "live" | "sprint";
 export type NetworkSelection =
   | { kind: "plant"; code: PlantCode }
   | { kind: "order"; id: string }
-  /** The sea lane to Conroe, optionally with one ship picked out by its sailing. */
-  | { kind: "freight"; sailAt?: number }
+  /** LED boards and imported parts, optionally with one ship (lot id) or truck (key) picked out. */
+  | { kind: "supply"; focus?: string }
   | null;
 
 /** The network tab shows the globe, or the map of one region's plants. */
@@ -19,7 +19,7 @@ type TwinState = {
   /** Selected machine in a plant view. */
   machineId: string | null;
   hoveredId: string | null;
-  /** Selected plant, order or the sea lane in the network view. */
+  /** Selected plant, order or the supply lines in the network view. */
   network: NetworkSelection;
   /** Bumped whenever something asks the camera to fly to the selected machine. */
   focusRequest: number;

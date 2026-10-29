@@ -2,118 +2,96 @@
 
 import type { ThreeElements } from "@react-three/fiber";
 import { Cyl, Part, Static } from "@/components/three/kit";
+import { orderById } from "@/domain/catalog/orders";
 import { useLive } from "@/live/store";
 
 type G = ThreeElements["group"];
 
-// Metro bogie frame: two fish-bellied side beams tied by two tubular cross beams.
-export function BogieFrame(props: G) {
+// 4W headlamp: a deep housing, the reflector or projector inside, a clear outer lens.
+export function Headlamp(props: G) {
   return (
     <group {...props}>
-      {[-0.95, 0.95].map((z) => (
-        <group key={z} position={[0, 0, z]}>
-          <Part size={[1.5, 0.44, 0.3]} mat="workpiece" position={[0, -0.04, 0]} />
-          <Part size={[0.95, 0.34, 0.28]} mat="workpiece" position={[-1.15, 0.12, 0]} rotation-z={0.16} />
-          <Part size={[0.95, 0.34, 0.28]} mat="workpiece" position={[1.15, 0.12, 0]} rotation-z={-0.16} />
-          <Cyl radius={0.15} height={0.12} mat="workpiece" position={[-1.45, 0.34, 0]} />
-          <Cyl radius={0.15} height={0.12} mat="workpiece" position={[1.45, 0.34, 0]} />
-        </group>
+      <Part size={[1.6, 0.7, 0.9]} mat="workpiece" />
+      <Cyl radius={0.26} height={0.12} mat="chrome" position={[-0.35, 0.36, 0]} />
+      <Cyl radius={0.2} height={0.12} mat="chrome" position={[0.3, 0.36, 0]} />
+      <Part size={[1.62, 0.08, 0.92]} mat="lens" edges={false} position={[0, 0.4, 0]} />
+    </group>
+  );
+}
+
+// 2W headlamp: a round-fronted lamp, smaller and lighter.
+export function ScooterHeadlamp(props: G) {
+  return (
+    <group {...props}>
+      <Cyl radius={0.45} height={0.5} mat="workpiece" />
+      <Cyl radius={0.3} height={0.1} mat="chrome" position={[0, 0.28, 0]} />
+      <Cyl radius={0.46} height={0.06} mat="lens" position={[0, 0.3, 0]} />
+    </group>
+  );
+}
+
+// Rear combination lamp: long and shallow, with a red 2K lens.
+export function RearLamp(props: G) {
+  return (
+    <group {...props}>
+      <Part size={[1.8, 0.35, 0.6]} mat="workpiece" />
+      <Part size={[1.82, 0.08, 0.62]} mat="lensRed" edges={false} position={[0, 0.2, 0]} />
+    </group>
+  );
+}
+
+export function FogLamp(props: G) {
+  return (
+    <group {...props}>
+      <Cyl radius={0.32} height={0.35} mat="workpiece" />
+      <Cyl radius={0.33} height={0.05} mat="lens" position={[0, 0.2, 0]} />
+    </group>
+  );
+}
+
+// LED board panel: green FR-4 with a row of LEDs and the driver IC.
+export function BoardPanel(props: G) {
+  return (
+    <group {...props}>
+      <Part size={[1.4, 0.06, 0.9]} mat="pcb" edges={false} />
+      {[-0.45, -0.15, 0.15, 0.45].map((x) => (
+        <Part key={x} size={[0.12, 0.06, 0.12]} mat="lens" edges={false} position={[x, 0.06, 0.2]} />
       ))}
-      {[-0.38, 0.38].map((x) => (
-        <group key={x}>
-          <Cyl radius={0.13} height={1.9} mat="workpiece" position={[x, 0, 0]} rotation-x={Math.PI / 2} />
-          <Part size={[0.28, 0.3, 0.26]} mat="workpiece" position={[x, -0.24, 0.42]} />
-          <Part size={[0.28, 0.3, 0.26]} mat="workpiece" position={[x, -0.24, -0.42]} />
-        </group>
-      ))}
+      <Part size={[0.3, 0.06, 0.3]} mat="workpiece" edges={false} position={[0.1, 0.06, -0.2]} />
     </group>
   );
 }
 
-// Excavator chassis: two long rails, cross members and a slew-ring plate.
-export function ChassisFrame(props: G) {
+// Metallized reflector, as it comes off the jig rack.
+export function Reflector(props: G) {
   return (
     <group {...props}>
-      <Part size={[3.6, 0.4, 0.28]} mat="workpiece" position={[0, 0, 0.8]} />
-      <Part size={[3.6, 0.4, 0.28]} mat="workpiece" position={[0, 0, -0.8]} />
-      {[-1.5, -0.4, 0.7, 1.6].map((x) => (
-        <Part key={x} size={[0.24, 0.32, 1.4]} mat="workpiece" position={[x, 0, 0]} />
-      ))}
-      <Cyl radius={0.62} height={0.12} mat="workpiece" position={[0.15, 0.24, 0]} edges />
+      <Cyl radius={0.4} height={0.35} mat="chrome" segments={18} />
     </group>
   );
 }
 
-// Frac pump fluid end: a forged block with three plunger bores.
-export function FluidEnd(props: G) {
-  return (
-    <group {...props}>
-      <Part size={[1.1, 0.7, 0.75]} mat="workpiece" />
-      {[-0.3, 0, 0.3].map((x) => (
-        <Cyl key={x} radius={0.09} height={0.2} mat="machineDark" position={[x, 0.36, 0]} />
-      ))}
-    </group>
-  );
-}
-
-export function DrillCollar(props: G) {
-  return (
-    <group {...props}>
-      <Cyl radius={0.17} height={5.5} mat="workpiece" rotation-z={Math.PI / 2} edges />
-    </group>
-  );
-}
-
-// Wind turbine main frame (bedplate): a deep fabricated box with a bearing seat.
-export function MainFrame(props: G) {
-  return (
-    <group {...props}>
-      <Part size={[2.6, 1.1, 1.8]} mat="workpiece" />
-      <Cyl radius={0.55} height={0.3} mat="machineDark" position={[0.5, 0.6, 0]} />
-    </group>
-  );
-}
-
-export function TorqueTubes(props: G) {
-  return (
-    <group {...props}>
-      {[-0.3, 0, 0.3].map((z) => (
-        <Part key={z} size={[5.6, 0.16, 0.16]} mat="workpiece" position={[0, 0, z]} />
-      ))}
-    </group>
-  );
-}
-
-const shapes: Record<string, (props: G) => React.ReactElement> = {
-  "SO-24117": BogieFrame,
-  "SO-24130": ChassisFrame,
-  "SO-24102": FluidEnd,
-  "SO-24095": DrillCollar,
-  "SO-24121": MainFrame,
-  "SO-24088": TorqueTubes,
+const byUnit: Record<string, (props: G) => React.ReactElement> = {
+  "Headlamp set": Headlamp,
+  Headlamp: ScooterHeadlamp,
+  "Rear lamp set": RearLamp,
+  "Lamp set": FogLamp,
+  "Board set": BoardPanel,
+  Board: BoardPanel,
 };
 
-/** What is on the machine right now, chosen from the order it is working on. */
-export function Workpiece({ machineId, ...props }: { machineId: string } & G) {
+/** What is on the machine right now, chosen from the schedule it is working on. */
+export function Workpiece({ machineId, metallic = false, ...props }: { machineId: string; metallic?: boolean } & G) {
   const orderId = useLive((s) => {
     const wo = s.snap?.machines[machineId]?.workOrderId;
     return wo ? s.snap!.workOrders[wo]?.orderId : undefined;
   });
-  const Shape = orderId ? shapes[orderId] : undefined;
-  // Changes with the order on the machine, so it is never merged into the static scene.
+  const order = orderId ? orderById[orderId] : undefined;
+  const Shape = order ? (metallic && !order.fills ? Reflector : byUnit[order.unitName]) : undefined;
+  // Changes with the schedule on the machine, so it is never merged into the static scene.
   return Shape ? (
-    <Static key={orderId} userData={{ dynamic: true }}>
+    <Static key={`${orderId}${metallic}`} userData={{ dynamic: true }}>
       <Shape {...props} />
     </Static>
   ) : null;
-}
-
-export function FrameOnStands(props: G) {
-  return (
-    <Static {...props}>
-      <Part size={[0.35, 0.55, 2.3]} mat="machineDark" position={[-1.05, 0.275, 0]} />
-      <Part size={[0.35, 0.55, 2.3]} mat="machineDark" position={[1.05, 0.275, 0]} />
-      <BogieFrame position={[0, 0.85, 0]} />
-    </Static>
-  );
 }

@@ -6,7 +6,7 @@ import { sprintTotals, type SprintHealth, type SprintTotals } from "./sprint";
 
 export const isOpen = (a: Alert) => a.resolvedAt === undefined;
 
-const alertRank: Record<Alert["kind"], number> = { breakdown: 0, quality: 1, material: 2, setup: 3 };
+const alertRank: Record<Alert["kind"], number> = { breakdown: 0, quality: 1, material: 2, manpower: 3, setup: 4, minor: 5 };
 
 /** Unresolved alerts the user may see, most serious and oldest first. */
 export function openAlerts(snap: Snapshot, scope: Scope, plant?: PlantCode) {
@@ -48,7 +48,8 @@ export function plantHealth(snap: Snapshot, code: PlantCode): PlantHealth {
 
 export type OrderHealth = SprintHealth;
 
-export type OpFlow = { done: number; queued: number; active: number; inTransit: number };
+/** Units at one step: done, waiting, on a machine, and on a truck or at the dock on the way to it. */
+export type OpFlow = { done: number; queued: number; active: number; inTransit: number; docked: number };
 
 export type OrderProgress = {
   done: number;
@@ -65,7 +66,7 @@ export type OrderProgress = {
 
 export function orderProgress(snap: Snapshot, order: Order): OrderProgress {
   const last = order.route.length - 1;
-  const flow: OpFlow[] = order.route.map(() => ({ done: 0, queued: 0, active: 0, inTransit: 0 }));
+  const flow: OpFlow[] = order.route.map(() => ({ done: 0, queued: 0, active: 0, inTransit: 0, docked: 0 }));
   const workOrderIds: string[] = [];
   let done = order.shippedBefore;
   let released = 0;
@@ -80,9 +81,8 @@ export function orderProgress(snap: Snapshot, order: Order): OrderProgress {
       flow[i].active += wo.active[i];
     });
   }
-  for (const s of snap.shipments) {
-    if (snap.workOrders[s.workOrderId]?.orderId === order.id) flow[s.opIndex].inTransit += s.units;
-  }
+  for (const s of snap.shipments) if (s.orderId === order.id && s.opIndex >= 0) flow[s.opIndex].inTransit += s.units;
+  for (const d of snap.docks) if (d.orderId === order.id && d.opIndex >= 0) flow[d.opIndex].docked += d.units;
   const lostMs = snap.lostMs[order.id] ?? 0;
   // Health is the order's pace against this week's commitment, across every plant on its route.
   const sprint = sprintTotals(snap, snap.sprint.lines.filter((l) => l.orderId === order.id));

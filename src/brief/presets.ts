@@ -2,11 +2,12 @@ import type { Scope } from "@/domain/access";
 import { customers, orderById } from "@/domain/catalog/orders";
 import { personById } from "@/domain/catalog/people";
 import { plantByCode } from "@/domain/catalog/plants";
-import { crossingStep } from "@/domain/freight";
 import type { Snapshot } from "@/domain/types";
+import { day } from "@/lib/format";
 import { visibleOrders } from "@/live/selectors";
+import { boardSupplies, coverLabel, importSupply, longHaulTrucks, weeks } from "@/live/supply";
 import type { Answer, Block, Tone } from "./answer";
-import { causesFacts, freightFacts, networkFacts, ordersFacts, stopsFacts, type OrderFact, type StopFact } from "./facts";
+import { causesFacts, networkFacts, ordersFacts, stopsFacts, type OrderFact, type StopFact } from "./facts";
 
 // Ready-made briefings and workflows. They are worked out from the live facts in
 // the browser, so they answer instantly and need no model; Claude takes over for
@@ -27,7 +28,7 @@ export type Preset = {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const first = (personId: string) => personById[personId]?.name.split(" ")[0] ?? "the owner";
-const orderName = (o: OrderFact) => `${o.orderId} ${o.title.toLowerCase()}`;
+const orderName = (o: OrderFact) => `${o.orderId} ${o.title}`;
 const atRisk = (orders: OrderFact[]) => orders.filter((o) => o.health !== "on-track");
 const toneOf = (orders: OrderFact[], stops: StopFact[]): Tone =>
   orders.some((o) => o.health === "behind") ? "bad" : orders.some((o) => o.health === "at-risk") || stops.some((s) => !s.acknowledged) ? "watch" : "good";
@@ -62,7 +63,7 @@ const morning: Preset = {
   title: "Morning brief",
   blurb: "Where the week stands, what slipped overnight, and who to talk to.",
   question: "Give me the morning brief.",
-  steps: (snap, scope) => [`Reading ${plural(scope.plants.size, "plant")}`, "Checking every order against this week's plan", "Looking for stops nobody has picked up"],
+  steps: (snap, scope) => [`Reading ${plural(scope.plants.size, "plant")}`, "Checking every schedule against this week's plan", "Looking for stops nobody has picked up"],
   build(snap, scope) {
     const net = networkFacts(snap, scope);
     const orders = ordersFacts(snap, scope);
@@ -74,8 +75,8 @@ const morning: Preset = {
     const headline = behind.length
       ? `${orderName(behind[0])} is behind, and the week is at ${net.week.pacePct}% of plan overall.`
       : risky.length
-        ? `${plural(risky.length, "order")} at risk; the week is at ${net.week.pacePct}% of plan.`
-        : `Every order is on pace; the week is at ${net.week.pacePct}% of plan.`;
+        ? `${plural(risky.length, "schedule")} at risk; the week is at ${net.week.pacePct}% of plan.`
+        : `Every schedule is on pace; the week is at ${net.week.pacePct}% of plan.`;
     const blocks: Block[] = [
       {
         type: "stats",
@@ -86,7 +87,7 @@ const morning: Preset = {
           { label: "Open stops", value: `${net.openStops}`, sub: net.unacknowledgedStops ? `${net.unacknowledgedStops} not picked up` : "All being handled", tone: net.unacknowledgedStops ? "watch" : undefined },
         ],
       },
-      { type: "orders", title: risky.length ? "Orders that need attention" : "Orders this week", orderIds: (risky.length ? risky : orders).slice(0, 3).map((o) => o.orderId) },
+      { type: "orders", title: risky.length ? "Schedules that need attention" : "Schedules this week", orderIds: (risky.length ? risky : orders).slice(0, 3).map((o) => o.orderId) },
     ];
     const codes = fullPlants(snap, scope);
     if (codes.length > 1) blocks.push({ type: "compare_plants", title: "Plants against this week's plan", measure: "week_pace", codes });
@@ -95,7 +96,7 @@ const morning: Preset = {
     return {
       headline,
       tone: toneOf(orders, stops),
-      summary: `${plural(net.unitsFinishedToday, "unit")} out of the door so far today across ${plural(orders.length, "order")}.`,
+      summary: `${net.unitsFinishedToday.toLocaleString("en-IN")} lamps and boards through their last step so far today, across ${plural(orders.length, "schedule")}.`,
       blocks,
       followUps: [behind[0] ? `Why is ${behind[0].orderId} behind?` : "What could still go wrong this week?", "Where are we losing hours?", "Who do I need to call right now?"],
     };
@@ -106,18 +107,18 @@ const risk: Preset = {
   id: "risk",
   kind: "briefing",
   title: "What's at risk this week",
-  blurb: "Orders slipping against the plan, why, and who owns them.",
+  blurb: "Schedules slipping against the plan, why, and who owns them.",
   question: "What's at risk this week?",
-  steps: () => ["Checking every order against this week's plan", "Tracing what is holding the slow ones up"],
+  steps: () => ["Checking every schedule against this week's plan", "Tracing what is holding the slow ones up"],
   build(snap, scope) {
     const orders = ordersFacts(snap, scope);
     const stops = stopsFacts(snap, scope);
     const risky = atRisk(orders);
     if (!risky.length) {
       return {
-        headline: `All ${plural(orders.length, "order")} are on pace for this week's commitment.`,
+        headline: `All ${plural(orders.length, "schedule")} are on pace for this week's commitment.`,
         tone: "good",
-        summary: stops.length ? `${plural(stops.length, "stop")} open, none on a slipping order yet.` : "Nothing is stopped right now.",
+        summary: stops.length ? `${plural(stops.length, "stop")} open, none on a slipping schedule yet.` : "Nothing is stopped right now.",
         blocks: [{ type: "orders", orderIds: orders.slice(0, 4).map((o) => o.orderId) }, { type: "burndown", title: "The week so far" }],
         followUps: ["Where are we losing hours?", "Which plant is furthest ahead?"],
       };
@@ -127,7 +128,7 @@ const risk: Preset = {
     const owners = worst.openStops.map((s) => [s.ownerId, `Owns ${s.title.toLowerCase()} on ${s.machine}, holding up ${s.orderId}`] as const);
     const people = [...new Map([...owners, ...leads]).entries()].slice(0, 4).map(([personId, reason]) => ({ personId, reason }));
     return {
-      headline: `${plural(risky.length, "order")} slipping; ${orderName(worst)} is furthest off at ${worst.pacePct}% pace.`,
+      headline: `${plural(risky.length, "schedule")} slipping; ${orderName(worst)} is furthest off at ${worst.pacePct}% pace.`,
       tone: risky.some((o) => o.health === "behind") ? "bad" : "watch",
       summary: `At today's rate ${worst.orderId} finishes ${worst.thisWeek.forecastPct}% of its commitment by Monday, with ${worst.thisWeek.machineHoursLost} machine-hours lost so far${worst.openStops.length ? ` and ${plural(worst.openStops.length, "stop")} open on its route` : ""}.`,
       blocks: [
@@ -177,7 +178,7 @@ const hours: Preset = {
       tone: share >= 40 ? "watch" : "good",
       summary: `That is ${share}% of the ${Math.round(causes.totalHoursLost)} machine-hours lost to stops so far, across ${plural(top.stops, "stop")} at ${top.plants.join(", ")}.`,
       blocks,
-      followUps: [`Why does ${top.cause.toLowerCase()} keep happening?`, "Which orders did it hurt?", "Who picks up stops slowest?"],
+      followUps: [`Why does ${top.cause.toLowerCase()} keep happening?`, "Which schedules did it hurt?", "Who picks up stops slowest?"],
     };
   },
 };
@@ -186,9 +187,9 @@ const call: Preset = {
   id: "call",
   kind: "briefing",
   title: "Who do I need to call",
-  blurb: "Stops nobody has picked up, and the leads of orders that are slipping.",
+  blurb: "Stops nobody has picked up, and the leads of schedules that are slipping.",
   question: "Who do I need to call right now?",
-  steps: () => ["Finding stops nobody has picked up", "Matching stops to the orders they hold up", "Finding who owns each one"],
+  steps: () => ["Finding stops nobody has picked up", "Matching stops to the schedules they hold up", "Finding who owns each one"],
   build(snap, scope) {
     const orders = ordersFacts(snap, scope);
     const stops = stopsFacts(snap, scope);
@@ -226,7 +227,7 @@ const sweep: Preset = {
   steps: (snap, scope) => [
     `Scanning open stops across ${plural(scope.plants.size, "plant")}`,
     "Keeping the ones over 30 minutes or not picked up",
-    "Matching each to the order and due date it holds up",
+    "Matching each to the schedule and due date it holds up",
     "Finding the owner and their plant manager",
     "Drafting the escalation note",
   ],
@@ -259,7 +260,7 @@ const sweep: Preset = {
           items: [
             { label: "To escalate", value: `${hits.length}`, sub: `of ${plural(stops.length, "open stop")}` },
             { label: "Not picked up", value: `${hits.filter((s) => !s.acknowledged).length}`, tone: hits.some((s) => !s.acknowledged) ? "bad" : undefined },
-            { label: "Orders held up", value: `${new Set(hits.map((s) => s.orderId).filter(Boolean)).size}` },
+            { label: "Schedules held up", value: `${new Set(hits.map((s) => s.orderId).filter(Boolean)).size}` },
           ],
         },
         { type: "stops", alertIds: hits.slice(0, 5).map((s) => s.alertId) },
@@ -276,55 +277,68 @@ const sweep: Preset = {
   },
 };
 
-const usSupply: Preset = {
-  id: "us-supply",
+const supply: Preset = {
+  id: "supply",
   kind: "briefing",
-  title: "US supply line",
-  blurb: "Stock at sea and in Conroe against the 2 to 3 months it needs.",
-  question: "Is the US stock holding up?",
-  steps: () => ["Counting what is on each ship to Houston", "Checking Conroe's stock against what it uses", "Checking what Pune ships this week"],
+  title: "LED boards and imports",
+  blurb: "Boards at each lamp plant and on the road from Bawal, and imported LED parts at sea.",
+  question: "Are the lines covered for LED boards and imported parts?",
+  steps: () => ["Checking the boards at each lamp plant", "Following the trucks from Bawal Electronics", "Counting imported parts at sea and at Bawal"],
   build(snap, scope) {
-    const f = freightFacts(snap, scope);
-    const sorted = [...f.orders].sort((a, b) => a.coverWeeks - b.coverWeeks);
-    const low = sorted[0];
-    const short = f.orders.filter((o) => o.puneThisWeek?.short);
-    const onTheWay = f.orders.reduce((n, o) => n + o.unitsOnTheWay, 0);
-    const next = f.ships.find((s) => s.now !== "loading at JNPT") ?? f.ships[0];
-    const range = sorted.length > 1 ? `${low.coverWeeks} to ${sorted[sorted.length - 1].coverWeeks}` : `${low.coverWeeks}`;
-    const headline =
-      low.health === "on-track"
-        ? `US stock covers ${range} weeks of Conroe's use, inside the 2 to 3 months it needs.`
-        : `${low.title} stock is down to ${low.coverWeeks} weeks, under the 2-month floor.`;
-    const shortNote = short
-      .map((o) => `${o.title}: Pune is on course for ${o.puneThisWeek!.forecastByWeekEnd} of ${o.puneThisWeek!.committed} this week. The rest would reach Conroe a week late, around ${o.puneThisWeek!.shortUnitsLandInConroe}, leaving ${o.puneThisWeek!.coverWeeksAfterShortfall} weeks of cover.`)
-      .join(" ");
+    const boards = boardSupplies(snap, scope).sort((a, b) => a.coverHours - b.coverHours);
+    const trucks = longHaulTrucks(snap, scope);
+    const held = trucks.filter((t) => t.delay);
+    const imports = scope.user.role === "executive" || scope.plants.has("BWE") ? importSupply(snap) : null;
+    const worst = boards[0];
+    const short = boards.filter((b) => b.health !== "on-track");
+    const where = (b: (typeof boards)[number]) => plantByCode[b.plant].name;
+    const headline = !worst
+      ? imports
+        ? `Imported LED parts cover ${weeks(imports.coverWeeks)} of what Bawal's SMT lines use.`
+        : "None of your schedules fit LED boards from Bawal."
+      : worst.health === "behind"
+        ? `${where(worst)} has run out of ${worst.name.charAt(0).toLowerCase()}${worst.name.slice(1)}; ${worst.userId} waits for the next truck from Bawal.`
+        : worst.health === "at-risk"
+          ? `${where(worst)} has ${coverLabel(worst.coverHours)} of boards left, less than the time to its next truck.`
+          : `Every lamp line has boards until its next truck${imports ? `, and imported parts cover ${weeks(imports.coverWeeks)}` : ""}.`;
+    const ids = [...new Set(short.flatMap((b) => [b.userId, b.supplierId]))];
+    const people = [
+      ...short.map((b) => ({ personId: plantByCode[b.plant].managerId, reason: `Runs ${where(b)}, ${coverLabel(b.coverHours)} of boards on hand` })),
+      ...(short.length ? [{ personId: orderById[short[0].supplierId].leadEngineerId, reason: "Plans board builds and trucks at Bawal Electronics" }] : []),
+      ...short.map((b) => ({ personId: orderById[b.userId].leadEngineerId, reason: `Leads ${b.userId} ${orderById[b.userId].title}` })),
+    ].filter((p, k, all) => personById[p.personId] && all.findIndex((q) => q.personId === p.personId) === k);
     const blocks: Block[] = [
       {
         type: "stats",
         items: [
-          { label: "Lowest cover", value: `${low.coverWeeks} wk`, sub: low.title, tone: low.health === "on-track" ? "good" : low.health === "at-risk" ? "watch" : "bad" },
-          { label: "On the way", value: `${onTheWay}`, sub: `units on ${plural(f.ships.length, "ship")}` },
-          {
-            label: "Next into Conroe",
-            value: next ? next.atConroe : "None",
-            sub: next ? next.contents.map((c) => plural(c.units, orderById[c.orderId].unitName.toLowerCase())).join(", ").slice(0, 48) : undefined,
-          },
-          { label: "Pune this week", value: short.length ? `${short.length} short` : "On course", sub: "for next week's sailing", tone: short.length ? "watch" : "good" },
-        ],
+          ...(worst
+            ? [{ label: "Lowest board cover", value: worst.onHand > 0 ? coverLabel(worst.coverHours) : "None", sub: where(worst), tone: worst.health === "on-track" ? ("good" as const) : worst.health === "at-risk" ? ("watch" as const) : ("bad" as const) }]
+            : []),
+          { label: "Trucks on the road", value: `${trucks.length}`, sub: held.length ? `${held.length} held on the way` : "None held", tone: held.length ? ("watch" as const) : undefined },
+          ...(imports
+            ? [
+                { label: "Imported parts", value: `${imports.coverWeeks.toFixed(1)} wk`, sub: "at Bawal and at sea", tone: imports.health === "on-track" ? ("good" as const) : ("watch" as const) },
+                { label: "Next lot at Bawal", value: imports.lots[0] ? day(imports.lots[0].arriveAt) : "None", sub: imports.lots[0]?.id },
+              ]
+            : []),
+        ].slice(0, 4),
       },
-      { type: "orders", title: "Orders finished in Conroe", orderIds: f.orders.map((o) => o.orderId) },
+      ...(ids.length ? [{ type: "orders" as const, title: "Schedules it touches", orderIds: ids.slice(0, 6) }] : []),
+      ...(people.length ? [{ type: "people" as const, title: "Who to call", items: people.slice(0, 4) }] : []),
       {
         type: "note",
-        title: "Why the buffer exists",
-        text: `Door to door is ${f.doorToDoorDays} days: a truck to JNPT, a weekly sailing of 35 to 45 days to Houston, then customs and a truck to Conroe. A stop in Pune today shows up in Conroe about two months later, and the stock at sea and on site is what absorbs it.`,
+        title: "Why it matters",
+        text: "Every LED lamp Lumax builds fits boards from Bawal Electronics, and most of the parts on them are imported through JNPT. A shift lost at Bawal reaches Sanand two days later and Bengaluru four or five days later.",
       },
     ];
     return {
       headline,
-      tone: low.health === "behind" ? "bad" : low.health === "at-risk" || short.length ? "watch" : "good",
-      summary: shortNote ? shortNote.slice(0, 320) : `Pune is on course to ship this week's plan for every order finished in Conroe.`,
+      tone: short.some((b) => b.health === "behind") ? "bad" : short.length || held.length ? "watch" : "good",
+      summary: held.length
+        ? `${held.map((t) => `The truck to ${plantByCode[t.to].name} is ${t.delay!.hours} h late: ${t.delay!.reason.charAt(0).toLowerCase()}${t.delay!.reason.slice(1)}.`).join(" ")}`.slice(0, 320)
+        : undefined,
       blocks,
-      followUps: ["What happens if L10 stops for a day?", "Which ship lands next in Houston?", "What's at risk this week?"],
+      followUps: ["What is holding up the ADB boards at Bawal?", "When does the next truck reach Sanand II?", "What's at risk this week?"],
     };
   },
 };
@@ -334,25 +348,25 @@ function customerCall(customerId: string, name: string): Preset {
     id: `customer:${customerId}`,
     kind: "workflow",
     title: `Prep a call with ${name}`,
-    blurb: "Pulls their orders, checks the week, and writes talking points you can use.",
+    blurb: "Pulls their schedules, checks the week, and writes talking points you can use.",
     question: `Prepare me for a call with ${name}.`,
-    steps: () => [`Finding ${name}'s orders`, "Checking this week's pace on each", "Checking for stops on their routes", "Forecasting the week", "Writing talking points"],
+    steps: () => [`Finding ${name}'s schedules`, "Checking this week's pace on each", "Checking for stops on their routes", "Forecasting the week", "Writing talking points"],
     build(snap, scope) {
       const orders = ordersFacts(snap, scope).filter((o) => o.customer === name);
       const risky = atRisk(orders);
       const points = orders.map((o) => {
         const status =
           o.health === "on-track"
-            ? `On plan this week (${o.thisWeek.unitsOut} of ${o.thisWeek.unitsCommitted} ${o.title.toLowerCase()} out)`
+            ? `On plan this week (${o.thisWeek.unitsOut.toLocaleString("en-IN")} of ${o.thisWeek.unitsCommitted.toLocaleString("en-IN")} out)`
             : `Running behind this week's plan (${o.pacePct}% pace${o.openStops.length ? `, ${o.openStops[0].title.toLowerCase()} at ${o.openStops[0].plant}` : ""}); recovery owner is ${o.lead}`;
-        return `- ${o.orderId} ${o.title}: ${o.unitsDoneOverall} of ${o.quantity} delivered overall, due ${o.due}. ${status}.`;
+        return `- ${o.orderId} ${o.title}: ${o.unitsDoneOverall.toLocaleString("en-IN")} of ${o.quantity.toLocaleString("en-IN")} on this schedule delivered, due ${o.due}. ${status}.`;
       });
       return {
         headline: !risky.length
           ? `Everything for ${name} is on plan this week.`
           : risky.length === orders.length
-            ? `${name}'s ${orders.length === 1 ? "order is" : "orders are"} slipping this week; be ready to talk about ${risky[0].orderId}.`
-            : `${risky.length} of their ${orders.length} orders ${risky.length === 1 ? "is" : "are"} slipping this week; be ready to talk about ${risky[0].orderId}.`,
+            ? `${name}'s ${orders.length === 1 ? "schedule is" : "schedules are"} slipping this week; be ready to talk about ${risky[0].orderId}.`
+            : `${risky.length} of their ${orders.length} schedules ${risky.length === 1 ? "is" : "are"} slipping this week; be ready to talk about ${risky[0].orderId}.`,
         tone: risky.some((o) => o.health === "behind") ? "bad" : risky.length ? "watch" : "good",
         blocks: [
           { type: "orders", orderIds: orders.map((o) => o.orderId) },
@@ -370,10 +384,18 @@ function customerCall(customerId: string, name: string): Preset {
   };
 }
 
-/** The presets this user can run: the briefings, the sweep, and a call prep per customer they can see. */
+/** The presets this user can run: the briefings, the sweep, and a call prep per OEM they can see. */
 export function presetsFor(scope: Scope): Preset[] {
   const orders = visibleOrders(scope);
   const visible = new Set(orders.map((o) => o.customerId));
-  const us = orders.some((o) => crossingStep.has(o.id)) ? [usSupply] : [];
-  return [morning, risk, hours, call, ...us, sweep, ...customers.filter((c) => visible.has(c.id)).map((c) => customerCall(c.id, c.name))];
+  const boards = orders.some((o) => o.consumes) ? [supply] : [];
+  return [
+    morning,
+    risk,
+    hours,
+    call,
+    ...boards,
+    sweep,
+    ...customers.filter((c) => visible.has(c.id) && c.group !== "Internal").map((c) => customerCall(c.id, c.name)),
+  ];
 }

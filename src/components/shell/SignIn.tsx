@@ -10,22 +10,22 @@ import { Avatar } from "@/components/ui/primitives";
 import { BrandMark } from "./TopBar";
 
 // A curated set of engineers keeps the picker short; everyone else signs in the same way.
-const featuredEngineers = ["priya-kulkarni", "karan-shah", "neha-gokhale", "rohit-pawar", "sneha-joshi", "ganesh-thorat"];
+const featuredEngineers = ["kunal-desai", "pooja-arora", "shruti-apte", "prakash-reddy", "harish-kumar", "kavita-rao"];
 
 const groups: { title: string; note: string; people: Person[] }[] = [
   {
     title: "Executives",
-    note: "Every plant and order, at a glance.",
+    note: "Every plant and schedule, at a glance.",
     people: people.filter((p) => p.role === "executive"),
   },
   {
-    title: "Plant managers",
-    note: "Their own plant in full, and the orders that pass through it.",
+    title: "Plant heads",
+    note: "Their own plant in full, and the schedules that pass through it.",
     people: people.filter((p) => p.role === "plant-manager"),
   },
   {
-    title: "Engineers",
-    note: "The orders they lead and the machines they own.",
+    title: "Programme leads and engineers",
+    note: "The schedules they lead and the machines they own.",
     people: featuredEngineers.map((id) => people.find((p) => p.id === id)!),
   },
 ];
@@ -48,10 +48,10 @@ export function SignIn() {
             <span className="font-stretch-semi-expanded text-[17px] font-bold tracking-tight">{tenant.name}</span>
           </div>
           <div className="max-w-2xl">
-            <h1 className="font-stretch-expanded text-[34px] leading-[1.1] font-semibold tracking-tight">See the plants the way your team does</h1>
+            <h1 className="font-stretch-expanded text-[34px] leading-[1.1] font-semibold tracking-tight">Eleven lamp plants, one live view</h1>
             <p className="mt-3 text-[15px] leading-relaxed text-muted">
-              This demo runs on simulated plant data and has no passwords. Pick a person to sign in as them; what they can open depends on their
-              role.
+              This demo runs on simulated plant data and has no passwords. The plants, OEMs and programmes are Lumax&apos;s own; the quantities,
+              machines, stops and people are made up. Pick a person to sign in as them; what they can open depends on their role.
             </p>
           </div>
         </header>

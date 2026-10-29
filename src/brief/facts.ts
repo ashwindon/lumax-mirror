@@ -1,12 +1,12 @@
 import { canSeeAlert, canSeeOrder, canSeePlant, type Scope } from "@/domain/access";
 import { machineById, machinesByPlant } from "@/domain/catalog/machines";
-import { customerById, orderById } from "@/domain/catalog/orders";
+import { customerById, orderById, stockById } from "@/domain/catalog/orders";
 import { people, personById } from "@/domain/catalog/people";
 import { plantByCode, plants } from "@/domain/catalog/plants";
 import type { Alert, AlertKind, PlantCode, Snapshot } from "@/domain/types";
-import { BUFFER_TARGET_WEEKS, freightLegs } from "@/domain/freight";
-import { day, dueDate, plantClock } from "@/lib/format";
-import { puneOutlook, seaLoads, usBuffers } from "@/live/freight";
+import { IMPORT_COVER_WEEKS, importLegs } from "@/domain/freight";
+import { day, dayTime, dueDate, plantClock } from "@/lib/format";
+import { boardSupplies, importSupply, longHaulTrucks } from "@/live/supply";
 import { isOpen, machineContext, openAlerts, orderProgress, plantHealth, visibleOrders } from "@/live/selectors";
 import { machineTarget, paceHealth, responseTimes, sprintTotals, topCauses, velocity, visibleLines } from "@/live/sprint";
 
@@ -115,7 +115,11 @@ function orderFact(snap: Snapshot, scope: Scope, orderId: string) {
     orderId: order.id,
     title: order.title,
     customer: customerById[order.customerId].name,
-    sector: customerById[order.customerId].sector,
+    customerGroup: customerById[order.customerId].group,
+    unit: order.unitName,
+    ...(order.unitPriceInr ? { unitPriceInr: order.unitPriceInr } : {}),
+    ...(order.consumes && !order.fills ? { fitsLedBoardsFrom: "Bawal Electronics", boardStock: order.consumes.stockId } : {}),
+    ...(order.fills ? { ledBoardsFor: stockById[order.fills].plant } : {}),
     due: dueDate(order.dueInDays, snap.sprint.weekStart),
     dueInDaysFromWeekStart: order.dueInDays,
     quantity: order.quantity,
@@ -256,41 +260,57 @@ export function peopleFacts(snap: Snapshot, scope: Scope, query: string) {
     });
 }
 
-/** The sea lane to Conroe: how long it takes, what is on it, and how long the US stock lasts. */
-export function freightFacts(snap: Snapshot, scope: Scope) {
-  const loads = seaLoads(snap, scope);
+/**
+ * What feeds the lamp lines: LED boards at each lamp plant and on the road from Bawal,
+ * and the imported LED parts at Bawal and at sea.
+ */
+export function supplyFacts(snap: Snapshot, scope: Scope) {
+  const imports = importSupply(snap);
+  const seesImports = scope.user.role === "executive" || scope.plants.has("BWE");
   return {
     ...clock(snap),
-    trip: freightLegs.map((l) => `${l.name}: ${l.days.toLowerCase()}`),
-    doorToDoorDays: "40 to 60",
-    stockTargetWeeks: `${BUFFER_TARGET_WEEKS[0]} to ${BUFFER_TARGET_WEEKS[1]} (2 to 3 months of what Conroe uses)`,
-    orders: usBuffers(snap, scope).map((b) => {
-      const o = puneOutlook(snap, b.orderId);
-      return {
-        orderId: b.orderId,
-        title: orderById[b.orderId].title,
-        unitsOnTheWay: b.onTheWay,
-        unitsInConroe: b.onSite,
-        conroeUsesPerWeek: b.weeklyUse,
-        coverWeeks: Math.round(b.coverWeeks * 10) / 10,
-        health: b.health,
-        puneThisWeek: o && {
-          committed: o.committed,
-          doneSoFar: o.done,
-          forecastByWeekEnd: o.forecast,
-          short: o.short,
-          landsInConroe: day(o.landsAt),
-          shortUnitsLandInConroe: o.short ? day(o.lateAt) : null,
-          coverWeeksAfterShortfall: Math.round(o.coverAfter * 10) / 10,
-        },
-      };
-    }),
-    ships: loads.map((l) => ({
-      sailing: day(l.sailAt),
-      now: l.leg === "port" ? "loading at JNPT" : l.leg === "sea" ? "at sea" : "in Houston, clearing customs",
-      atHouston: day(l.berthAt),
-      atConroe: day(l.arriveAt),
-      contents: l.byOrder.map((o) => ({ orderId: o.orderId, units: o.units })),
+    ledBoards: boardSupplies(snap, scope).map((b) => ({
+      plant: b.plant,
+      plantName: plantByCode[b.plant].name,
+      schedule: `${b.userId} ${orderById[b.userId].title}`,
+      boardOrder: b.supplierId,
+      boardsOnHand: b.onHand,
+      hoursOfCoverAtPlan: Number.isFinite(b.coverHours) ? Math.round(b.coverHours) : null,
+      onTheRoad: b.onRoad,
+      atBawalDock: b.atDock,
+      roadTime: b.road,
+      health: b.health,
+      nextTruck: b.next
+        ? { arrives: dayTime(b.next.arriveAt), units: b.next.units, ...(b.next.delay ? { heldHours: b.next.delay.hours, why: b.next.delay.reason } : {}) }
+        : null,
     })),
+    longHaulTrucks: longHaulTrucks(snap, scope).map((t) => ({
+      to: t.to,
+      left: dayTime(t.departAt),
+      arrives: dayTime(t.arriveAt),
+      contents: t.byOrder,
+      ...(t.delay ? { heldHours: t.delay.hours, why: t.delay.reason } : {}),
+    })),
+    importedParts:
+      imports && seesImports
+        ? {
+            what: imports.name,
+            trip: importLegs.map((l) => `${l.name}: ${l.days.toLowerCase()}`),
+            coverWeeks: Math.round(imports.coverWeeks * 10) / 10,
+            onHandWeeks: Math.round(imports.onHandWeeks * 10) / 10,
+            targetWeeks: `${IMPORT_COVER_WEEKS[0]} to ${IMPORT_COVER_WEEKS[1]} (Lumax says it holds about two months of inventory)`,
+            health: imports.health,
+            lots: imports.lots.map((l) => ({
+              lot: l.id,
+              weeksOfParts: imports.weeklyUse ? Math.round((l.kits / imports.weeklyUse) * 10) / 10 : null,
+              now: l.leg === "origin" ? "booked, not yet sailed" : l.leg === "sea" ? "at sea" : "landed at JNPT, on rail inland",
+              sails: day(l.sailAt),
+              atJnpt: day(l.berthAt),
+              atBawal: day(l.arriveAt),
+              ...(l.rolledDays ? { rolledToNextSailing: true } : {}),
+            })),
+          }
+        : "Outside your access",
+    note: "Lanes, sailing day and transit times are assumptions; Lumax does not publish its logistics partners.",
   };
 }

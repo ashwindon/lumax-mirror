@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { plants } from "@/domain/catalog/plants";
+import type { PlantCode } from "@/domain/types";
 
 // The shape of every answer on the briefing page, whether a preset built it or
 // Claude did. Blocks point at real orders, plants, stops and people by id; the
@@ -12,7 +14,7 @@ const short = (max: number) => z.string().min(1).max(max);
 export const tones = ["good", "watch", "bad"] as const;
 const tone = z.enum(tones);
 
-const plantCode = z.enum(["L01", "L02", "L03", "L04", "L05", "L06", "L07", "L08", "L09", "L10", "U01"]);
+const plantCode = z.enum(plants.map((p) => p.code) as [PlantCode, ...PlantCode[]]);
 const only = { plant: plantCode.optional(), orderId: id.optional() };
 const title = short(60).optional();
 
@@ -27,8 +29,8 @@ export const blockSchema = z.discriminatedUnion("type", [
       .max(4),
   }),
   z.object({ type: z.literal("orders"), title, orderIds: z.array(id).min(1).max(6) }),
-  z.object({ type: z.literal("plants"), title, codes: z.array(plantCode).min(1).max(10) }),
-  z.object({ type: z.literal("compare_plants"), title, measure: z.enum(plantMeasures), codes: z.array(plantCode).max(10).optional() }),
+  z.object({ type: z.literal("plants"), title, codes: z.array(plantCode).min(1).max(11) }),
+  z.object({ type: z.literal("compare_plants"), title, measure: z.enum(plantMeasures), codes: z.array(plantCode).max(11).optional() }),
   z.object({ type: z.literal("burndown"), title, ...only }),
   z.object({ type: z.literal("causes"), title, ...only }),
   z.object({ type: z.literal("stops"), title, alertIds: z.array(id).min(1).max(6) }),

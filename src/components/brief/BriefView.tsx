@@ -6,7 +6,7 @@ import { canSeePlant } from "@/domain/access";
 import { plants } from "@/domain/catalog/plants";
 import type { Snapshot } from "@/domain/types";
 import { plantClock } from "@/lib/format";
-import { usBuffers } from "@/live/freight";
+import { boardSupplies } from "@/live/supply";
 import { useLive } from "@/live/store";
 import { plantHealth } from "@/live/selectors";
 import { paceHealth, sprintTotals } from "@/live/sprint";
@@ -71,15 +71,19 @@ function useTeasers(snap: Snapshot | null) {
     const stops = stopsFacts(snap, scope);
     const lost = causesFacts(snap, scope).totalHoursLost;
     const escalate = stops.filter((s) => !s.acknowledged || s.openMinutes >= 30).length;
-    const us = usBuffers(snap, scope).sort((a, b) => a.coverWeeks - b.coverWeeks)[0];
+    const short = boardSupplies(snap, scope).filter((b) => b.health !== "on-track");
     return {
       morning: { value: `${net.week.pacePct}%`, label: "week pace", tone: healthColor[net.week.health] },
-      risk: { value: `${net.ordersAtRisk}`, label: net.ordersAtRisk === 1 ? "order slipping" : "orders slipping", tone: net.ordersAtRisk ? "var(--idle)" : undefined },
+      risk: { value: `${net.ordersAtRisk}`, label: net.ordersAtRisk === 1 ? "schedule slipping" : "schedules slipping", tone: net.ordersAtRisk ? "var(--idle)" : undefined },
       hours: { value: `${Math.round(lost)} h`, label: "lost to stops" },
       call: { value: `${net.unacknowledgedStops}`, label: net.unacknowledgedStops === 1 ? "stop not picked up" : "stops not picked up", tone: net.unacknowledgedStops ? "var(--stop)" : undefined },
       sweep: { value: `${escalate}`, label: escalate === 1 ? "stop to escalate" : "stops to escalate", tone: escalate ? "var(--idle)" : undefined },
-      ...(us ? { "us-supply": { value: us.coverWeeks.toFixed(1), label: "weeks of US stock", tone: healthColor[us.health] } } : {}),
-    };
+      supply: {
+        value: `${short.length}`,
+        label: short.length === 1 ? "plant short of boards" : "plants short of boards",
+        tone: short.some((b) => b.health === "behind") ? "var(--stop)" : short.length ? "var(--idle)" : undefined,
+      },
+    } as Record<string, { value: string; label: string; tone?: string }>;
     // Recompute on each snapshot; the scope is stable for the session.
   }, [snap, scope]);
 }
@@ -247,7 +251,7 @@ export function BriefView() {
                 onChange={(e) => setDraft(e.target.value)}
                 maxLength={500}
                 autoComplete="off"
-                placeholder="Ask anything about the plants, e.g. why is the paint booth at L06 holding things up?"
+                placeholder="Ask anything about the plants, e.g. why is Sanand II short of ADB boards?"
                 className="h-10 min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-faint"
               />
               <kbd className="hidden rounded border border-line px-1.5 text-[11px] text-faint sm:block">/</kbd>

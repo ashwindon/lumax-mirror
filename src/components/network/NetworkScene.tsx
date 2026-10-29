@@ -9,14 +9,14 @@ import { FloorFrame, Part, useMaterials } from "@/components/three/kit";
 import { palette } from "@/components/three/palette";
 import { LabelProjector, type LabelBoard } from "@/components/three/ScreenLabels";
 import { Stage } from "@/components/three/Stage";
-import { orderById } from "@/domain/catalog/orders";
+import { orderById, orders, stockById } from "@/domain/catalog/orders";
 import { plantByCode, plants, sameRegion } from "@/domain/catalog/plants";
-import type { Plant, PlantCode, RegionId, Shipment } from "@/domain/types";
+import type { Order, Plant, PlantCode, RegionId, Shipment } from "@/domain/types";
 import { useLive } from "@/live/store";
 import { plantHealth } from "@/live/selectors";
 import { sprintTotals } from "@/live/sprint";
 import { useTwin } from "@/store/twin";
-import { kmToWorld, plantPosition, portPosition, regionMaps } from "./geo";
+import { gatewayPosition, kmToWorld, plantPosition, regionMaps } from "./geo";
 
 function Board({ region }: { region: RegionId }) {
   const { board, roads, water } = regionMaps[region];
@@ -115,6 +115,24 @@ function PlantSite({ plant, onRoute }: { plant: Plant; onRoute: boolean }) {
   );
 }
 
+/** A plant under construction: its outline on the ground and a ghosted shed. */
+function GhostSites({ region }: { region: RegionId }) {
+  return (
+    <>
+      {(regionMaps[region].ghosts ?? []).map((g) => {
+        const w = Math.max(...g.sheds.map((s) => s.w)) * 0.7;
+        const d = g.sheds.reduce((n, s) => n + s.d, 0) * 0.7;
+        return (
+          <group key={g.name} position={kmToWorld(region, g.at)}>
+            <Part size={[w, 1.1, d]} mat="ghost" edges={false} castShadow={false} position={[0, 0.55, 0]} />
+            <FloorFrame size={[w + 2, d + 2]} thickness={0.14} color={palette.edges} y={0.05} />
+          </group>
+        );
+      })}
+    </>
+  );
+}
+
 function curve(a: THREE.Vector3, b: THREE.Vector3) {
   const mid = a.clone().lerp(b, 0.5);
   mid.y = 3 + a.distanceTo(b) * 0.25;
@@ -125,30 +143,42 @@ const arc = (from: PlantCode, to: PlantCode) => curve(plantPosition(from, 1.2), 
 
 const tmp = new THREE.Vector3();
 
-/** Every plant-to-plant hand-off any order makes; these lanes stay mounted and are shown when in use. */
-const allLanes = (() => {
-  const keys = new Map<string, { from: PlantCode; to: PlantCode }>();
-  for (const order of Object.values(orderById)) {
-    for (let i = 1; i < order.route.length; i++) {
-      const [from, to] = [order.route[i - 1].plant, order.route[i].plant];
-      if (from !== to) keys.set(`${from}>${to}`, { from, to });
-    }
+/** The plant-to-plant hand-offs of one order: its route, and the board trucks to the plant that fits them. */
+function handOffs(order: Order) {
+  const pairs: { from: PlantCode; to: PlantCode }[] = [];
+  for (let i = 1; i < order.route.length; i++) {
+    const [from, to] = [order.route[i - 1].plant, order.route[i].plant];
+    if (from !== to) pairs.push({ from, to });
   }
-  return [...keys.entries()].map(([key, { from, to }]) => {
-    // A hand-off to the other region runs to the port at the edge of each map instead.
-    if (sameRegion(from, to)) return { key, from, to, region: plantByCode[from].region, ...arc(from, to) };
-    const region = plantByCode[from].region;
-    return { key, from, to, region, ...curve(plantPosition(from, 1.2), portPosition(region, 1.2)) };
+  if (order.fills) pairs.push({ from: order.route[order.route.length - 1].plant, to: stockById[order.fills].plant });
+  return pairs;
+}
+
+const laneKeys = (order: Order) => {
+  const keys = new Set(handOffs(order).map(({ from, to }) => `${from}>${to}`));
+  // A lamp schedule that fits boards lights the board lane from Bawal too.
+  const board = order.consumes && !order.fills ? orders.find((o) => o.fills === order.consumes!.stockId) : undefined;
+  if (board) handOffs(board).forEach(({ from, to }) => keys.add(`${from}>${to}`));
+  return keys;
+};
+
+/**
+ * Every hand-off between plants, drawn on the map of the region it runs in. A hand-off
+ * to another cluster runs to the highway exit at the edge of each map instead. These
+ * lanes stay mounted and are shown when in use.
+ */
+const allLanes = (() => {
+  const pairs = new Map<string, { from: PlantCode; to: PlantCode }>();
+  for (const order of orders) for (const p of handOffs(order)) pairs.set(`${p.from}>${p.to}`, p);
+  return [...pairs.entries()].flatMap(([key, { from, to }]) => {
+    const [rf, rt] = [plantByCode[from].region, plantByCode[to].region];
+    if (rf === rt) return [{ key, from, to, region: rf, ...arc(from, to) }];
+    return [
+      { key, from, to, region: rf, ...curve(plantPosition(from, 1.2), gatewayPosition(rf, rt, to, 1.2)) },
+      { key, from, to, region: rt, ...curve(gatewayPosition(rt, rf, to, 1.2), plantPosition(to, 1.2)) },
+    ];
   });
 })();
-
-/** The Conroe end of a sea lane: from the port to the plant. */
-const arrivalLanes = allLanes
-  .filter((l) => !sameRegion(l.from, l.to))
-  .map((l) => {
-    const region = plantByCode[l.to].region;
-    return { ...l, region, ...curve(portPosition(region, 1.2), plantPosition(l.to, 1.2)) };
-  });
 
 // Shared by every unit in transit, so units coming and going never create materials.
 const unitMaterial = new THREE.MeshStandardMaterial({ color: palette.materials.workpiece.color, roughness: 0.4 });
@@ -172,20 +202,14 @@ function MovingUnit({ shipment, highlight }: { shipment: Shipment; highlight: bo
 
 function Flows({ orderId, region }: { orderId: string | null; region: RegionId }) {
   const shipments = useLive((s) => s.snap?.shipments);
-  const workOrders = useLive((s) => s.snap?.workOrders);
 
   // Which lanes carry something now, and which belong to the selected order.
   const busy = useMemo(() => new Set((shipments ?? []).map((s) => `${s.from}>${s.to}`)), [shipments]);
-  const onOrder = useMemo(() => {
-    const keys = new Set<string>();
-    const route = orderId ? orderById[orderId].route : [];
-    for (let i = 1; i < route.length; i++) if (route[i - 1].plant !== route[i].plant) keys.add(`${route[i - 1].plant}>${route[i].plant}`);
-    return keys;
-  }, [orderId]);
+  const onOrder = useMemo(() => (orderId ? laneKeys(orderById[orderId]) : new Set<string>()), [orderId]);
 
   // Each lane keeps a dashed and a solid line mounted and shows one of them, instead of
   // mounting lines as trucks come and go: a new line would compile its shader mid-frame.
-  const lanes = [...allLanes, ...arrivalLanes].filter((l) => l.region === region);
+  const lanes = allLanes.filter((l) => l.region === region);
   return (
     <group>
       {lanes.map(({ key, a, b, mid }) => (
@@ -206,11 +230,11 @@ function Flows({ orderId, region }: { orderId: string | null; region: RegionId }
           <QuadraticBezierLine start={a} end={b} mid={mid} color={palette.accent} lineWidth={2.4} transparent opacity={0.7} visible={onOrder.has(key)} />
         </group>
       ))}
-      {/* Trucks only; ships between regions are drawn on the globe. */}
+      {/* Shuttle trucks only; long-haul trucks between clusters are drawn on the globe. */}
       {(shipments ?? [])
         .filter((s) => sameRegion(s.from, s.to) && plantByCode[s.from].region === region)
         .map((s) => (
-          <MovingUnit key={s.id} shipment={s} highlight={!!orderId && workOrders?.[s.workOrderId]?.orderId === orderId} />
+          <MovingUnit key={s.id} shipment={s} highlight={!!orderId && onOrder.has(`${s.from}>${s.to}`)} />
         ))}
     </group>
   );
@@ -220,7 +244,7 @@ export default function NetworkScene({ labels, region }: { labels: LabelBoard; r
   const selection = useTwin((s) => s.network);
   const selectNetwork = useTwin((s) => s.selectNetwork);
   const orderId = selection?.kind === "order" ? selection.id : null;
-  const routePlants = useMemo(() => new Set(orderId ? orderById[orderId].route.map((op) => op.plant) : []), [orderId]);
+  const routePlants = useMemo(() => new Set(orderId ? handOffs(orderById[orderId]).flatMap((p) => [p.from, p.to]).concat(orderById[orderId].route.map((op) => op.plant)) : []), [orderId]);
   const map = regionMaps[region];
 
   return (
@@ -238,6 +262,7 @@ export default function NetworkScene({ labels, region }: { labels: LabelBoard; r
         .map((p) => (
           <PlantSite key={p.code} plant={p} onRoute={routePlants.has(p.code)} />
         ))}
+      <GhostSites region={region} />
       <Flows orderId={orderId} region={region} />
       <LabelProjector board={labels} />
     </Stage>

@@ -3,7 +3,7 @@
 import { customerById, orderById } from "@/domain/catalog/orders";
 import { personById } from "@/domain/catalog/people";
 import type { Alert } from "@/domain/types";
-import { dueDate, hours } from "@/lib/format";
+import { dueDate, hours, num, rupees } from "@/lib/format";
 import { useLive } from "@/live/store";
 import { healthLabel, isOpen, orderProgress, visibleOrders, type OrderHealth } from "@/live/selectors";
 import { canSeeAlert } from "@/domain/access";
@@ -13,8 +13,7 @@ import { useUserScope } from "@/components/shell/AppFrame";
 import { Burndown } from "@/components/charts/Burndown";
 import { Avatar, Chip, Dot, Label, Meter, Panel, PersonRow, SectionTitle, TextButton, healthColor } from "@/components/ui/primitives";
 import { AlertRow } from "./AlertList";
-import { crossingStep } from "@/domain/freight";
-import { BufferNote } from "./Freight";
+import { BoardsNote } from "./Supply";
 import { OrderRoute } from "./OrderRoute";
 
 const healthRank: Record<OrderHealth, number> = { behind: 0, "at-risk": 1, "on-track": 2 };
@@ -30,7 +29,7 @@ export function OrdersList({ onSelect, className = "" }: { onSelect: (orderId: s
 
   return (
     <Panel className={`flex min-h-0 flex-col px-4 py-3 ${className}`}>
-      <SectionTitle>Orders in production ({rows.length})</SectionTitle>
+      <SectionTitle>Schedules in production ({rows.length})</SectionTitle>
       <ul className="mt-1 min-h-0 scroller overflow-y-auto">
         {rows.map(({ order, progress }) => (
           <li key={order.id} className="border-t border-line first:border-t-0">
@@ -58,7 +57,7 @@ export function OrdersList({ onSelect, className = "" }: { onSelect: (orderId: s
                   <div className="mt-1.5 flex items-center gap-2">
                     <Meter value={progress.done} max={order.quantity} tone={healthColor[progress.health]} />
                     <span className="shrink-0 text-[12px] tabular-nums text-muted">
-                      {progress.done}/{order.quantity}
+                      {num(progress.done)}/{num(order.quantity)}
                     </span>
                   </div>
                 )}
@@ -83,7 +82,7 @@ export function OrderDetail({
   orderId: string;
   onBack?: () => void;
   onShowAlert: (alert: Alert) => void;
-  /** Opens the sea freight panel, for orders finished across the sea. */
+  /** Opens the supply panel, for schedules that fit LED boards from Bawal. */
   onShowFreight?: () => void;
   highlightOp?: number;
   className?: string;
@@ -111,7 +110,7 @@ export function OrderDetail({
             {order.id} {order.title}
           </h2>
           <p className="text-[13px] text-muted">
-            {customerById[order.customerId].name}, {order.quantity} units due {dueDate(order.dueInDays, snap.sprint.weekStart)}
+            {customerById[order.customerId].name}, {num(order.quantity)} {order.unitName.toLowerCase()}s due {dueDate(order.dueInDays, snap.sprint.weekStart)}
           </p>
         </div>
         {onBack ? <TextButton onClick={onBack}>All orders</TextButton> : null}
@@ -120,23 +119,31 @@ export function OrderDetail({
       <div className="flex flex-col gap-1.5">
         <div className="flex items-baseline justify-between text-[13px]">
           <span className="font-semibold tabular-nums">
-            {p.done} of {order.quantity} done
+            {num(p.done)} of {num(order.quantity)} done
           </span>
-          <span className="text-muted">{p.finishedToday} finished today</span>
+          <span className="text-muted">{num(p.finishedToday)} finished today</span>
         </div>
         <Meter value={p.done} max={order.quantity} tone={healthColor[p.health]} />
         <p className="text-[12px] text-muted">
-          This week: {shippedThisWeek} of {committedUnits} committed units through the last step, {Math.round(p.sprint.pace * 100)}% of an even
-          pace. Stops on this order cost {hours(snap.sprint.lostMs[order.id] ?? 0)} of machine time so far.
+          This week: {num(shippedThisWeek)} of {num(committedUnits)} committed units through the last step, {Math.round(p.sprint.pace * 100)}% of an
+          even pace. Stops on this schedule cost {hours(snap.sprint.lostMs[order.id] ?? 0)} of machine time so far.
+          {order.unitPriceInr && shippedThisWeek < committedUnits * p.sprint.elapsed * 0.98
+            ? ` About ${rupees((committedUnits * p.sprint.elapsed - shippedThisWeek) * order.unitPriceInr)} of lamps are behind an even week.`
+            : ""}
         </p>
         {committedUnits < neededUnits ? (
           <p className="rounded-lg bg-panel-strong px-3 py-2 text-[12px]" style={{ color: "var(--idle)" }}>
-            Capacity on its route covers {committedUnits} of the {neededUnits} units it needs this week to stay on course for its due date.
+            Capacity on its route covers {num(committedUnits)} of the {num(neededUnits)} units it needs this week to stay on course for its due date.
           </p>
         ) : null}
-        {crossingStep.has(order.id) ? (
+        {order.consumes && !order.fills ? (
           <div className="mt-1">
-            <BufferNote orderId={order.id} onOpen={onShowFreight} />
+            <BoardsNote stockId={order.consumes.stockId} onOpen={onShowFreight} />
+          </div>
+        ) : null}
+        {order.fills ? (
+          <div className="mt-1">
+            <BoardsNote stockId={order.fills} onOpen={onShowFreight} />
           </div>
         ) : null}
       </div>
@@ -151,7 +158,7 @@ export function OrderDetail({
       ) : null}
 
       <div className="border-t border-line pt-4">
-        <Label>Lead engineer</Label>
+        <Label>{order.fills ? "Planner" : "Programme lead"}</Label>
         <div className="mt-2">
           <PersonRow personId={order.leadEngineerId} />
         </div>

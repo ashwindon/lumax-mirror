@@ -14,12 +14,12 @@ import { useTwin, type Lens } from "@/store/twin";
 import { Avatar, Dot, Panel, statusColor } from "@/components/ui/primitives";
 import { useUserScope } from "./AppFrame";
 
+/** Mirror's own mark: a lamp and its beam. Not Lumax's logo. */
 export function BrandMark({ className = "size-7" }: { className?: string }) {
   return (
     <svg viewBox="0 0 40 40" className={`shrink-0 ${className}`} aria-hidden>
-      <circle cx="20" cy="6.5" r="5.5" fill={tenant.accent} />
-      <path d="M2 14h7.5a6.5 6.5 0 0 1 6.5 6.5V39H9.5A7.5 7.5 0 0 1 2 31.5Z" fill={tenant.accent} />
-      <path d="M38 14h-7.5a6.5 6.5 0 0 0-6.5 6.5V39h6.5a7.5 7.5 0 0 0 7.5-7.5Z" fill={tenant.accent} />
+      <path d="M4 8h9a12 12 0 0 1 0 24H4a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2Z" fill={tenant.accent} />
+      <path d="M22 13h15M24 20h14M22 27h15" stroke={tenant.accent} strokeWidth="3.4" strokeLinecap="round" />
     </svg>
   );
 }
@@ -32,9 +32,12 @@ function subscribeClock(onTick: () => void) {
 function LiveClock() {
   const time = useSyncExternalStore(subscribeClock, () => plantClock(Date.now()), () => "--:--");
   return (
-    <span className="flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[12px] tabular-nums text-muted max-sm:hidden">
+    <span
+      className="flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[12px] tabular-nums text-muted max-sm:hidden"
+      title="Plants, OEMs and programmes are real; quantities, stops, machines and people are simulated."
+    >
       <Dot color="var(--run)" className="size-1.5" pulse />
-      Live {time} IST
+      Simulated · {time} IST
     </span>
   );
 }

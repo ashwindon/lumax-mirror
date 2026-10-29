@@ -9,7 +9,7 @@ import { answerSchema, type Answer, type AskEvent, type AskTurn, type Block } fr
 import {
   causesFacts,
   clock,
-  freightFacts,
+  supplyFacts,
   networkFacts,
   orderDetailFacts,
   ordersFacts,
@@ -25,26 +25,26 @@ const MODEL = "claude-opus-5-5";
 /** Tool rounds before giving up; a good answer needs two or three. */
 const MAX_TURNS = 8;
 
-const SYSTEM = `You are the operations analyst inside ${tenant.product}, the live digital twin of ${tenant.name}'s manufacturing network: 10 plants around Pune (L01 to L10) doing heat treatment, machining, fabrication, welding, coating and galvanizing, and one in Conroe, Texas (U01) that finishes work shipped from Pune by sea for US customers: precision machining, premium threading, coating, assembly and test. Senior people ask you what is going on and you answer from live plant data.
+const SYSTEM = `You are the operations analyst inside ${tenant.product}, the live digital twin of ${tenant.name}, India's leading automotive lamp maker. It runs eleven plants in five clusters beside the OEMs they serve: Dharuhera (DHR), Bawal lighting (BWL) and Bawal Electronics (BWE) in Haryana; Pantnagar (PNT) and Haridwar (HDW) in Uttarakhand; Chakan II (CK2), Chakan III (CK3) and Chinchwad (CCW) near Pune; Sanand (SND) and Sanand II (SN2) in Gujarat; and Bengaluru (BLR) at Bidadi. Senior people ask you what is going on and you answer from live plant data.
 
 How the plants run:
-- A customer order (e.g. SO-24117 Metro bogie frames) is a route of operations across several plants. Units move between plants by truck.
-- Orders finished in Conroe (drill collars, frac gate valves) are rough-machined in Pune and shipped by sea: a truck to JNPT, a weekly Wednesday sailing of 35 to 45 days to the Port of Houston, then customs and a truck to Conroe, 40 to 60 days door to door. To ride out that gap, ${tenant.shortName} keeps 2 to 3 months (8 to 13 weeks) of what Conroe uses at sea and on site. A shortfall in Pune this week reaches Conroe about two months later, so judge it by what it does to that cover.
-- Work is planned as a weekly sprint. Every Monday at 06:00 IST each order commits a number of units through every step of its route, measured in standard machine-hours. "Pace" is hours done against where an even week would be by now: 100% is on plan, 90 to 98% is at risk, under 90% is behind.
-- Stops are breakdowns, quality holds, material shortages and set-ups on a machine. Each has a named owner who should acknowledge it. Machine-hours lost to stops are the main reason orders fall behind.
-- Every person, machine, order and customer in this demo is fictional. Plant names and specialties are real.
+- A schedule (e.g. SA-61021 e Vitara ADB headlamp sets for Maruti Suzuki) is one OEM programme's call-offs for the month. Its route runs through moulding (injection presses, 2K lenses, BMC reflectors), surface treatment (hard coat, vacuum metallizing), assembly lines, welding (hot-plate, vibration, ultrasonic) and test (leak, aim and photometry, function). Most routes stay inside one plant; a few use a sister plant in the same cluster, by shuttle truck every two hours.
+- Bawal Electronics builds the LED boards for the lamp plants on SMT lines, on internal orders (IO-...). Boards go to the lamp plant on a truck: Bawal and Dharuhera by shuttle, Uttarakhand overnight, Sanand in about 2 days, Pune 3, Bengaluru 4 to 5. A lamp line that fits boards stops when its plant runs out. The LED packages, driver ICs and connectors on the boards are mostly imported through JNPT; Lumax says it holds about two months of inventory against disruption.
+- Work is planned as a weekly sprint. Every Monday at 06:00 IST each schedule commits a number of units through every step of its route, measured in standard machine-hours, and plants level-load to it. "Pace" is hours done against where an even week would be by now: 100% is on plan, 90 to 98% is at risk, under 90% is behind.
+- Stops are breakdowns (rare: Lumax's plants run at 85 to 86% OEE), minor stops, mould and feeder changeovers, quality holds, material shortages (including waiting for boards) and lines short of contract operators. Each has a named owner who should acknowledge it.
+- Plant names, addresses, OEM customers and announced programmes are real. Quantities, prices, dates, stops, machine fleets and every person are fictional, and logistics lanes are assumptions. Never attribute anything to a real Lumax executive. Hyundai and Kia belong to the SL Lumax associate, and Lumax Auto Technologies is a separate company; neither is modelled.
 
 How to work:
 - Get the facts with the tools before answering. Never state a number you did not read from a tool. The data is already limited to what the person asking may see; if something is out of their reach, say so plainly.
-- Find the cause, not just the symptom: when an order is behind, trace it to the step, the machine, the stop and the person who owns it.
+- Find the cause, not just the symptom: when a schedule is behind, trace it to the step, the machine, the stop and the person who owns it, and check its LED boards when the route fits them.
 - Finish by calling present_answer exactly once. Do not write the answer as plain text.
 
 How to present:
 - The reader is an executive with a minute to spare. The headline is the answer in one sentence, conclusion first, with the number that matters.
-- Use two to four blocks; fewer is better when it answers the question. Prefer the visual blocks (orders, plants, compare_plants, burndown, causes, stops, people) over prose: they are drawn from live data by id. Use stats for at most four numbers you read from tools. A note is for context no visual can show, two sentences at most.
+- Use two to four blocks; fewer is better when it answers the question. Prefer the visual blocks (orders, plants, compare_plants, burndown, causes, stops, people) over prose: they are drawn from live data by id. The orders block takes schedule ids. Use stats for at most four numbers you read from tools. A note is for context no visual can show, two sentences at most.
 - When someone needs to act, include a people block naming who to call and why in a few words. Use draft only when the reader asked for a message or talking points.
 - Follow-ups are the next questions this reader would plausibly ask, in their words.
-- Plain, direct language. No filler, no hedging, no markdown in text fields.`;
+- Plain, direct language. Indian number formats (lakh, crore) for money. No filler, no hedging, no markdown in text fields.`;
 
 const plantCode = z.enum(Object.keys(plantByCode) as [PlantCode, ...PlantCode[]]);
 const only = z.object({ plant: plantCode.optional(), orderId: z.string().optional() });
@@ -66,14 +66,16 @@ const tools = {
     run: (scope) => networkFacts(liveSnapshot(), scope),
   }),
   list_orders: tool({
-    description: "Every order the user can see, slowest first: customer, due date, lead engineer, pace and health this week, units out against commitment, forecast, hours lost and open stops on its route.",
+    description:
+      "Every schedule the user can see, slowest first: OEM, due date, programme lead, pace and health this week, units out against commitment, forecast, hours lost and open stops on its route. Board orders from Bawal Electronics are included.",
     input: z.object({}),
-    label: () => "Checking every order against this week's plan",
+    label: () => "Checking every schedule against this week's plan",
     run: (scope) => ordersFacts(liveSnapshot(), scope),
   }),
   get_order: tool({
-    description: "One order step by step: each operation's plant, done against committed this week, health, and units on a machine, waiting, or in transit. Use it to find which step is holding an order up.",
-    input: z.object({ orderId: z.string().describe("e.g. SO-24117") }),
+    description:
+      "One schedule step by step: each operation's plant, done against committed this week, health, and units on a machine, waiting, or in transit. Use it to find which step is holding a schedule up.",
+    input: z.object({ orderId: z.string().describe("e.g. SA-61021 or IO-71021") }),
     label: (i) => `Tracing ${i.orderId} through its route`,
     run: (scope, i) => orderDetailFacts(liveSnapshot(), scope, i.orderId.toUpperCase()),
   }),
@@ -84,17 +86,18 @@ const tools = {
     run: (scope, i) => plantDetailFacts(liveSnapshot(), scope, i.plant),
   }),
   list_stops: tool({
-    description: "Open stops (breakdowns, quality holds, material shortages, set-ups), most serious and oldest first, with cause, minutes open, owner, whether acknowledged and the order it holds up.",
+    description:
+      "Open stops (breakdowns, quality holds, material shortages, manpower shortfalls, changeovers, minor stops), most serious and oldest first, with cause, minutes open, owner, whether acknowledged and the schedule it holds up.",
     input: z.object({
       plant: plantCode.optional(),
-      kind: z.enum(["breakdown", "quality", "material", "setup"]).optional(),
+      kind: z.enum(["breakdown", "quality", "material", "manpower", "setup", "minor"]).optional(),
       unacknowledgedOnly: z.boolean().optional(),
     }),
     label: (i) => (i.unacknowledgedOnly ? "Finding stops nobody has picked up" : `Reading open stops${i.plant ? ` at ${i.plant}` : ""}`),
     run: (scope, i) => stopsFacts(liveSnapshot(), scope, i),
   }),
   get_stop_causes: tool({
-    description: "Machine-hours lost to stops this week grouped by cause, biggest first, optionally for one plant or order.",
+    description: "Machine-hours lost to stops this week grouped by cause, biggest first, optionally for one plant or schedule.",
     input: only,
     label: (i) => `Adding up hours lost${i.orderId ? ` on ${i.orderId}` : i.plant ? ` at ${i.plant}` : ""}`,
     run: (scope, i) => causesFacts(liveSnapshot(), scope, i),
@@ -106,20 +109,20 @@ const tools = {
     run: (scope, i) => responseFacts(liveSnapshot(), scope, i.plant),
   }),
   get_velocity: tool({
-    description: "Committed against done machine-hours for the last six weeks and this week, optionally for one plant or order. Earlier weeks are simulated.",
+    description: "Committed against done machine-hours for the last six weeks and this week, optionally for one plant or schedule. Earlier weeks are simulated.",
     input: only,
     label: () => "Comparing with earlier weeks",
     run: (scope, i) => velocityFacts(liveSnapshot(), scope, i),
   }),
-  get_sea_freight: tool({
+  get_supply: tool({
     description:
-      "The sea lane from Pune to Conroe: each ship and what it carries, when it reaches Houston and Conroe, the US stock per order in weeks of Conroe's use against the 8 to 13 week target, and whether Pune ships this week's plan.",
+      "LED boards and imported parts: boards on hand at each lamp plant and hours of cover at plan, trucks on the road from Bawal Electronics and any held on the way, and (for executives and Bawal Electronics) imported LED parts at Bawal and at sea in weeks of cover, with each weekly lot.",
     input: z.object({}),
-    label: () => "Checking the ships to Houston",
-    run: (scope) => freightFacts(liveSnapshot(), scope),
+    label: () => "Following the LED boards from Bawal",
+    run: (scope) => supplyFacts(liveSnapshot(), scope),
   }),
   find_people: tool({
-    description: "People by name, job title or plant code, with extension, the orders they lead, the machines they own and their open stops. An empty query lists everyone.",
+    description: "People by name, job title or plant code, with extension, the schedules they lead, the machines they own and their open stops. An empty query lists everyone.",
     input: z.object({ query: z.string() }),
     label: (i) => (i.query ? `Looking up ${i.query}` : "Looking up the team"),
     run: (scope, i) => peopleFacts(liveSnapshot(), scope, i.query),
@@ -146,7 +149,7 @@ const toolParams: Anthropic.Beta.BetaToolUnion[] = [
   {
     name: PRESENT,
     description:
-      "Show the answer to the reader. Call it once, last. Blocks that take ids are drawn live from the twin: orders by order id, plants by plant code, stops by alertId, people by personId, exactly as the tools returned them.",
+      "Show the answer to the reader. Call it once, last. Blocks that take ids are drawn live from the twin: orders by schedule id, plants by plant code, stops by alertId, people by personId, exactly as the tools returned them.",
     input_schema: inputSchema(answerSchema),
   },
 ];

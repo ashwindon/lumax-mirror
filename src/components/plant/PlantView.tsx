@@ -8,7 +8,6 @@ import { canSeeOrder, canSeePlant } from "@/domain/access";
 import { machineById } from "@/domain/catalog/machines";
 import { customerById, orders } from "@/domain/catalog/orders";
 import { plantByCode } from "@/domain/catalog/plants";
-import { crossingStep } from "@/domain/freight";
 import type { Alert, PlantCode } from "@/domain/types";
 import { useLive } from "@/live/store";
 import { orderProgress, plantHealth } from "@/live/selectors";
@@ -27,7 +26,7 @@ import { MachineDetail } from "@/components/panels/MachineDetail";
 import { StatusBar } from "@/components/panels/PlantSummary";
 import { Avatar, Dot, Label, Meter, Panel, PersonRow, SectionTitle, healthColor } from "@/components/ui/primitives";
 import { personById } from "@/domain/catalog/people";
-import { percent } from "@/lib/format";
+import { num, percent } from "@/lib/format";
 
 const PlantScene = dynamic(() => import("./three/PlantScene"), {
   ssr: false,
@@ -96,7 +95,7 @@ function PlantWeek({ code, onOpenOrder }: { code: PlantCode; onOpenOrder: (id: s
                     {order.route[l.opIndex].name}, {order.id}
                   </p>
                   <span className="shrink-0 text-[12px] tabular-nums text-muted">
-                    {done}/{l.units} {order.unitName.toLowerCase()}s
+                    {num(done)}/{num(l.units)} {order.unitName.toLowerCase()}s
                   </span>
                 </div>
                 <Meter value={Math.min(done, l.units)} max={l.units} tone={healthColor[health]} />
@@ -145,7 +144,7 @@ function PlantHeader({ code }: { code: PlantCode }) {
         <>
           <StatusBar counts={health.counts} total={health.total} />
           <p className="text-[12px] text-muted">
-            {snap.opsToday[code] ?? 0} operations finished today, machines running {percent(health.utilization)} of the time
+            {num(snap.opsToday[code] ?? 0)} operations finished today, machines running {percent(health.utilization)} of the time
           </p>
         </>
       ) : null}
@@ -163,13 +162,13 @@ function PlantWork({ code, onOpenOrder }: { code: PlantCode; onOpenOrder: (id: s
 
   return (
     <Panel className="flex min-h-0 flex-col gap-3 scroller overflow-y-auto px-5 py-4">
-      <SectionTitle>Orders on this floor</SectionTitle>
-      <p className="text-[13px] text-muted">Click a machine to see what it is making, for which order, and who to call.</p>
+      <SectionTitle>Schedules on this floor</SectionTitle>
+      <p className="text-[13px] text-muted">Click a machine to see what it is making, for which programme, and who to call.</p>
       <ul className="flex flex-col">
         {here.map((order) => {
           const p = orderProgress(snap, order);
           const ops = order.route
-            .map((op, i) => ({ op, f: p.flow[i], stock: crossingStep.get(order.id) === i }))
+            .map((op, i) => ({ op, f: p.flow[i] }))
             .filter(({ op, f }) => op.plant === code && f.active + f.queued > 0);
           return (
             <li key={order.id} className="border-t border-line first:border-t-0">
@@ -185,10 +184,9 @@ function PlantWork({ code, onOpenOrder }: { code: PlantCode; onOpenOrder: (id: s
                   </p>
                   <p className="truncate text-[12px] text-muted">{customerById[order.customerId].name}</p>
                   {ops.length ? (
-                    ops.map(({ op, f, stock }) => (
+                    ops.map(({ op, f }) => (
                       <p key={op.name} className="text-[12px] text-muted">
-                        {/* Units waiting at the first step after the sea are the stock shipped from Pune. */}
-                        {op.name}: {[f.active && `${f.active} on machine`, f.queued && (stock ? `${f.queued} in stock from Pune` : `${f.queued} waiting`)].filter(Boolean).join(", ")}
+                        {op.name}: {[f.active && `${num(f.active)} on machine`, f.queued && `${num(f.queued)} waiting`].filter(Boolean).join(", ")}
                       </p>
                     ))
                   ) : (
@@ -201,7 +199,7 @@ function PlantWork({ code, onOpenOrder }: { code: PlantCode; onOpenOrder: (id: s
           );
         })}
       </ul>
-      {here.length === 0 ? <Label>No orders you can see run through this plant.</Label> : null}
+      {here.length === 0 ? <Label>No schedules you can see run through this plant.</Label> : null}
     </Panel>
   );
 }
@@ -236,7 +234,7 @@ export function PlantView({ code }: { code: PlantCode }) {
         <Panel className="max-w-md px-6 py-5">
           <h1 className="text-[17px] font-semibold">{plantByCode[code].name} is outside your access</h1>
           <p className="mt-2 text-[13px] text-muted">
-            Its status shows on the network map. Ask {personById[plantByCode[code].managerId].name}, the plant manager, if you need to see its machines.
+            Its status shows on the network map. Ask {personById[plantByCode[code].managerId].name}, the plant head, if you need to see its machines.
           </p>
           <Link href="/" className="mt-4 inline-block rounded-lg bg-ink px-3 py-1.5 text-[13px] font-semibold text-page">
             Back to the network

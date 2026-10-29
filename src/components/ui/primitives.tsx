@@ -16,7 +16,7 @@ export function Panel({ className = "", children }: { className?: string; childr
 export const statusLabel: Record<MachineStatus, string> = {
   running: "Running",
   waiting: "Waiting for work",
-  setup: "In set-up",
+  setup: "In changeover",
   down: "Stopped",
 };
 
@@ -29,12 +29,18 @@ export const statusColor: Record<MachineStatus, string> = {
 
 export const alertKindLabel: Record<AlertKind, string> = {
   breakdown: "Breakdown",
+  minor: "Minor stop",
   quality: "Quality hold",
   material: "Material short",
-  setup: "Set-up",
+  manpower: "Manpower short",
+  setup: "Changeover",
 };
 
 export const alertColor = (kind: AlertKind) => (kind === "breakdown" || kind === "quality" ? "var(--stop)" : "var(--idle)");
+
+/** A stopped machine reads red for a breakdown or hold, amber for a minor stop the line leader clears. */
+export const stopTone = (status: MachineStatus, kind?: AlertKind) =>
+  status === "down" && kind === "minor" ? statusColor.setup : statusColor[status];
 
 export const healthColor: Record<OrderHealth, string> = { "on-track": "var(--run)", "at-risk": "var(--idle)", behind: "var(--stop)" };
 

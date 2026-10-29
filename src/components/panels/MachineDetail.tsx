@@ -3,13 +3,13 @@
 import { canSeeOrder } from "@/domain/access";
 import { customerById } from "@/domain/catalog/orders";
 import { personById } from "@/domain/catalog/people";
-import { duration, hours, plantClock } from "@/lib/format";
+import { duration, hours, num, plantClock } from "@/lib/format";
 import { useLive } from "@/live/store";
 import { machineContext, orderProgress } from "@/live/selectors";
 import { machineTarget, paceHealth, sprintHealthLabel } from "@/live/sprint";
 import { Ring } from "@/components/charts/Ring";
 import { useUserScope } from "@/components/shell/AppFrame";
-import { Chip, Label, Meter, Panel, PersonRow, TextButton, alertKindLabel, healthColor, statusColor, statusLabel } from "@/components/ui/primitives";
+import { Chip, Label, Meter, Panel, PersonRow, TextButton, alertKindLabel, healthColor, statusLabel, stopTone } from "@/components/ui/primitives";
 import type { Alert } from "@/domain/types";
 import { OrderRoute } from "./OrderRoute";
 
@@ -65,8 +65,8 @@ export function MachineDetail({
   return (
     <Panel className={`flex min-h-0 flex-col gap-4 scroller overflow-y-auto px-5 py-4 ${className}`}>
       <div className="flex flex-col items-start gap-2">
-        <Chip color={statusColor[live.status]}>
-          {statusLabel[live.status]} for {duration(snap.now - live.since)}
+        <Chip color={stopTone(live.status, alert?.kind)}>
+          {live.status === "down" && alert?.kind === "minor" ? "Minor stop" : statusLabel[live.status]} for {duration(snap.now - live.since)}
         </Chip>
         <h2 className="font-stretch-semi-expanded text-[19px] font-semibold leading-tight">{def.name}</h2>
       </div>
@@ -93,7 +93,7 @@ export function MachineDetail({
         {workOrder && order && op ? (
           <>
             <p className="mt-0.5 text-[15px] font-semibold">
-              {order.unitName} {live.unit} of {order.quantity}
+              {order.unitName} {num(live.unit ?? 0)} of {num(order.quantity)}
             </p>
             <p className="text-[13px] text-muted">
               {op.name}, work order {live.workOrderId}
@@ -108,7 +108,7 @@ export function MachineDetail({
         ) : live.otherWork ? (
           <>
             <p className="mt-0.5 text-[15px] font-semibold">{live.otherWork}</p>
-            <p className="text-[13px] text-muted">Not part of an order tracked in this view</p>
+            <p className="text-[13px] text-muted">Another programme&apos;s job, not one of the schedules tracked in this view</p>
           </>
         ) : (
           <p className="mt-0.5 text-[13px] text-muted">Nothing is queued for this machine. It starts again when work arrives.</p>
@@ -120,18 +120,18 @@ export function MachineDetail({
           <div className="flex flex-col gap-3 border-t border-line pt-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <Label>For order</Label>
+                <Label>For schedule</Label>
                 <p className="mt-0.5 text-[15px] font-semibold">
                   {order.id} {order.title}
                 </p>
                 <p className="text-[13px] text-muted">{customerById[order.customerId].name}</p>
               </div>
-              <TextButton onClick={() => onOpenOrder(order.id)}>Open order</TextButton>
+              <TextButton onClick={() => onOpenOrder(order.id)}>Open schedule</TextButton>
             </div>
             <OrderRoute order={order} flow={progress.flow} released={progress.released} highlight={live.opIndex} />
           </div>
         ) : (
-          <p className="border-t border-line pt-4 text-[13px] text-muted">This machine is working on an order outside your access.</p>
+          <p className="border-t border-line pt-4 text-[13px] text-muted">This machine is working on a schedule outside your access.</p>
         )
       ) : null}
 
@@ -143,7 +143,7 @@ export function MachineDetail({
 
       {alert && order && orderVisible ? (
         <p className="rounded-xl bg-panel-strong px-3.5 py-3 text-[13px] leading-snug">
-          {order.unitName} {live.unit} has been held {duration(snap.now - alert.raisedAt)}. Stops on {order.id} today add up to{" "}
+          {order.unitName} {num(live.unit ?? 0)} has been held {duration(snap.now - alert.raisedAt)}. Stops on {order.id} today add up to{" "}
           {hours(progress!.lostMs)} against {order.slackHours} h of float.
         </p>
       ) : null}
@@ -170,7 +170,7 @@ export function MachineDetail({
           <span style={{ width: `${(live.downMs / elapsed) * 100}%`, background: "var(--stop)" }} />
         </div>
         <p className="mt-1.5 text-[12px] text-muted">
-          Running {hours(live.runMs)}, set-up {hours(live.setupMs)}, stopped {hours(live.downMs)}
+          Running {hours(live.runMs)}, changeovers {hours(live.setupMs)}, stopped {hours(live.downMs)}
         </p>
       </div>
 

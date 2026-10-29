@@ -7,20 +7,21 @@ import * as THREE from "three";
 import { useShallow } from "zustand/react/shallow";
 import { palette } from "@/components/three/palette";
 import { LabelProjector, type LabelBoard } from "@/components/three/ScreenLabels";
-import { orderById } from "@/domain/catalog/orders";
-import { plants } from "@/domain/catalog/plants";
-import { crossingStep } from "@/domain/freight";
+import { orderById, orders, stockById } from "@/domain/catalog/orders";
+import { plantByCode, plants } from "@/domain/catalog/plants";
+import { importLegAt } from "@/domain/freight";
 import { regionById, regions } from "@/domain/catalog/regions";
-import type { RegionId } from "@/domain/types";
+import type { PlantCode, RegionId } from "@/domain/types";
 import { plantHealth } from "@/live/selectors";
 import { useLive } from "@/live/store";
+import { longHaulTrucks, tripProgress } from "@/live/supply";
 import { useTwin } from "@/store/twin";
-import { seaLoads } from "@/live/freight";
-import { closeView, GLOBE_R, homeDirection, lane, latLon, loadPosition, regionAt } from "./globe";
+import { closeView, contextPins, GLOBE_R, homeDirection, inlandLane, latLon, lotPosition, regionAt, roadLanes, seaLane, truckPosition } from "./globe";
 import { DOT_COUNT, LAND_BITS, MARK_BITS, fibonacciPoint } from "./globeDots";
 
-// A light globe: one sphere, one point cloud for the land, a sea lane and a few
-// markers. No shadows or post-processing, so it costs far less than a plant scene.
+// A light globe: one sphere, one point cloud for the land, the import lane, the
+// long-haul roads and a few markers. No shadows or post-processing, so it costs far
+// less than a plant scene.
 
 // ---- Land ----
 
@@ -86,7 +87,7 @@ const dotMaterial = new THREE.ShaderMaterial({
   transparent: true,
   depthWrite: false,
   uniforms: {
-    uSize: { value: 0.085 },
+    uSize: { value: 0.06 },
     uScale: { value: 1 },
     uMaxPx: { value: 9 },
     uLand: { value: new THREE.Color("#A3ACB5") },
@@ -152,50 +153,104 @@ function Earth({ onPick, onHover }: { onPick: (region: RegionId) => void; onHove
 const shipGeometry = new THREE.SphereGeometry(1, 16, 12);
 const shipMaterial = new THREE.MeshStandardMaterial({ color: palette.materials.workpiece.color, roughness: 0.5 });
 const shipHighlight = new THREE.MeshStandardMaterial({ color: palette.accent, roughness: 0.5 });
+const truckGeometry = new THREE.BoxGeometry(1, 0.7, 0.7);
+const heldMaterial = new THREE.MeshStandardMaterial({ color: palette.status.setup, roughness: 0.5 });
 
-/** The lane to Conroe and one ship per weekly sailing on it. */
-function SeaLane({ highlight, focus, orderId }: { highlight: boolean; focus?: number; orderId?: string }) {
+const pointer = {
+  onPointerOver: (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    document.body.style.cursor = "pointer";
+  },
+  onPointerOut: () => (document.body.style.cursor = ""),
+};
+
+/** The sea lane from East Asia to JNPT and the rail line to Bawal, with one ship per weekly lot. */
+function ImportLane({ highlight, focus }: { highlight: boolean; focus?: string }) {
   const dashed = useRef<{ material: { dashOffset: number } } | null>(null);
   const selectNetwork = useTwin((s) => s.selectNetwork);
-  const shipments = useLive((s) => s.snap?.shipments);
-  const workOrders = useLive((s) => s.snap?.workOrders);
+  const imports = useLive((s) => s.snap?.imports);
   const now = useLive((s) => s.snap?.now ?? 0);
   // A ship moves a few pixels a day, so ships are placed when the feed changes, not every frame.
-  const loads = useMemo(() => (shipments && workOrders ? seaLoads({ shipments, workOrders, now }) : []), [shipments, workOrders, now]);
+  const lots = useMemo(
+    () =>
+      (imports ?? []).map((l) => {
+        const leg = importLegAt(l, now);
+        return { ...l, leg, progress: Math.min(1, Math.max(0, (now - l.sailAt) / (l.berthAt - l.sailAt))) };
+      }),
+    [imports, now],
+  );
   useFrame((_, delta) => {
     if (dashed.current) dashed.current.material.dashOffset -= delta * 0.5;
   });
   return (
     <group>
-      <Line points={lane.points} color={palette.edges} lineWidth={1.5} transparent opacity={0.9} />
+      <Line points={seaLane.points} color={palette.edges} lineWidth={1.5} transparent opacity={0.9} />
       <Line
         ref={dashed as never}
-        points={lane.points}
+        points={seaLane.points}
         color={highlight ? palette.accent : palette.materials.workpiece.color}
-        lineWidth={highlight ? 2.6 : 1.6}
+        lineWidth={highlight ? 2.4 : 1.4}
         dashed
-        dashSize={0.35}
-        gapSize={0.45}
-        visible={loads.length > 0 || highlight}
+        dashSize={0.25}
+        gapSize={0.3}
       />
-      {loads.map((l) => {
-        const lit = focus === l.sailAt || (highlight && focus === undefined && (!orderId || l.byOrder.some((o) => o.orderId === orderId)));
+      <Line points={inlandLane.points} color={highlight ? palette.accent : palette.edges} lineWidth={highlight ? 2.2 : 1.4} dashed dashSize={0.12} gapSize={0.1} />
+      {lots.map((l) => {
+        const lit = focus === l.id || (highlight && !focus);
         return (
           <mesh
-            key={l.sailAt}
+            key={l.id}
             geometry={shipGeometry}
             material={lit ? shipHighlight : shipMaterial}
-            position={loadPosition(l)}
-            scale={(focus === l.sailAt ? 1.5 : 1) * (0.06 + Math.min(0.05, l.units * 0.001))}
+            position={lotPosition(l, now)}
+            scale={(focus === l.id ? 1.5 : 1) * (l.leg === "origin" ? 0.045 : 0.07)}
             onClick={(e) => {
               e.stopPropagation();
-              selectNetwork({ kind: "freight", sailAt: l.sailAt });
+              selectNetwork({ kind: "supply", focus: l.id });
             }}
-            onPointerOver={(e) => {
+            {...pointer}
+          />
+        );
+      })}
+    </group>
+  );
+}
+
+/** Long-haul roads from Bawal to the other clusters, and the trucks on them now. */
+function Roads({ lit, focus }: { lit: Set<PlantCode>; focus?: string }) {
+  const selectNetwork = useTwin((s) => s.selectNetwork);
+  const shipments = useLive((s) => s.snap?.shipments);
+  const now = useLive((s) => s.snap?.now ?? 0);
+  const trucks = useMemo(() => (shipments ? longHaulTrucks({ shipments }) : []), [shipments]);
+  const busy = new Set(trucks.map((t) => t.to));
+  return (
+    <group>
+      {Object.entries(roadLanes).map(([code, lane]) => (
+        <Line
+          key={code}
+          points={lane!.points}
+          color={lit.has(code as PlantCode) ? palette.accent : palette.materials.workpiece.color}
+          lineWidth={lit.has(code as PlantCode) ? 2.2 : 1.2}
+          transparent
+          opacity={lit.has(code as PlantCode) || busy.has(code as PlantCode) ? 0.9 : 0.35}
+        />
+      ))}
+      {trucks.map((t) => {
+        const p = truckPosition(t.to, tripProgress(t, now));
+        const picked = focus === t.key;
+        return (
+          <mesh
+            key={t.key}
+            geometry={truckGeometry}
+            material={t.delay ? heldMaterial : picked || lit.has(t.to) ? shipHighlight : shipMaterial}
+            position={p}
+            quaternion={new THREE.Quaternion().setFromUnitVectors(yAxis, p.clone().normalize())}
+            scale={picked ? 0.11 : 0.075}
+            onClick={(e) => {
               e.stopPropagation();
-              document.body.style.cursor = "pointer";
+              selectNetwork({ kind: "supply", focus: t.key });
             }}
-            onPointerOut={() => (document.body.style.cursor = "")}
+            {...pointer}
           />
         );
       })}
@@ -205,8 +260,9 @@ function SeaLane({ highlight, focus, orderId }: { highlight: boolean; focus?: nu
 
 // ---- Regions ----
 
-const ringGeometry = new THREE.RingGeometry(0.34, 0.44, 48);
+const ringGeometry = new THREE.RingGeometry(0.11, 0.15, 40);
 const zAxis = new THREE.Vector3(0, 0, 1);
+const yAxis = new THREE.Vector3(0, 1, 0);
 
 function Hub({ region, active, onPick }: { region: RegionId; active: boolean; onPick: (region: RegionId) => void }) {
   const ring = useRef<THREE.Mesh>(null);
@@ -215,13 +271,14 @@ function Hub({ region, active, onPick }: { region: RegionId; active: boolean; on
     useShallow((s) => (s.snap ? plants.filter((p) => p.region === region).some((p) => plantHealth(s.snap!, p.code).worst === "down") : false)),
   );
   const { position, quaternion } = useMemo(() => {
-    const position = latLon(lat, lon, 0.03);
+    const position = latLon(lat, lon, 0.02);
     return { position, quaternion: new THREE.Quaternion().setFromUnitVectors(zAxis, position.clone().normalize()) };
   }, [lat, lon]);
   const ringMaterial = useRef<THREE.MeshBasicMaterial>(null);
+  const phase = regions.findIndex((r) => r.id === region) * 0.2;
   useFrame(({ clock }) => {
     if (!ring.current || !ringMaterial.current) return;
-    const k = (clock.elapsedTime * 0.6 + (region === "texas" ? 0.5 : 0)) % 1;
+    const k = (clock.elapsedTime * 0.6 + phase) % 1;
     ring.current.scale.setScalar((active ? 1.4 : 1) + k * 1.6);
     ringMaterial.current.opacity = (1 - k) * 0.9;
   });
@@ -232,17 +289,37 @@ function Hub({ region, active, onPick }: { region: RegionId; active: boolean; on
         <meshBasicMaterial ref={ringMaterial} color={color} transparent side={THREE.DoubleSide} />
       </mesh>
       <mesh
-        position={[0, 0, 0.18]}
+        position={[0, 0, 0.09]}
         rotation-x={Math.PI / 2}
         onClick={(e) => {
           e.stopPropagation();
           onPick(region);
         }}
+        {...pointer}
       >
-        <cylinderGeometry args={[0.07, 0.07, 0.36, 12]} />
+        <cylinderGeometry args={[0.035, 0.035, 0.18, 10]} />
         <meshStandardMaterial color={color} roughness={0.5} />
       </mesh>
     </group>
+  );
+}
+
+const pinColors = { design: "#3E6FB0", partner: "#7A8591", associate: "#A3ACB5", port: "#454B53" } as const;
+
+/** Design centres, the Stanley partner, the SL Lumax associate and JNPT: context, not plants. */
+function ContextPins() {
+  return (
+    <>
+      {contextPins.map((p) => {
+        const position = latLon(p.lat, p.lon, 0.03);
+        return (
+          <mesh key={p.id} position={position} quaternion={new THREE.Quaternion().setFromUnitVectors(yAxis, position.clone().normalize())}>
+            <cylinderGeometry args={[0.04, 0.04, 0.08, 12]} />
+            <meshStandardMaterial color={pinColors[p.kind]} roughness={0.5} />
+          </mesh>
+        );
+      })}
+    </>
   );
 }
 
@@ -280,9 +357,9 @@ function Pilot({ flightRef }: { flightRef: RefObject<Flight | null> }) {
   return null;
 }
 
-/** How far back the resting view sits: narrow screens need a little more room for both ends of the lane. */
+/** How far back the resting view sits: narrow screens need a little more room for India and the lane east. */
 function homeDistance(aspect: number) {
-  return GLOBE_R * 5.6 * Math.min(1.6, Math.max(1, (1.4 / aspect) ** 0.35));
+  return GLOBE_R * 3.4 * Math.min(1.6, Math.max(1, (1.4 / aspect) ** 0.35));
 }
 
 function Scene({
@@ -303,12 +380,24 @@ function Scene({
   const selection = useTwin((s) => s.network);
   const hovered = useRef<RegionId | null>(null);
 
-  const crossingOrder = selection?.kind === "order" && crossingStep.has(selection.id) ? selection.id : undefined;
-  const selectedRegions = useMemo(() => {
-    if (selection?.kind === "freight") return new Set<RegionId>(regions.map((r) => r.id));
-    if (selection?.kind === "order") return new Set(orderById[selection.id].route.map((op) => plants.find((p) => p.code === op.plant)!.region));
-    if (selection?.kind === "plant") return new Set([plants.find((p) => p.code === selection.code)!.region]);
-    return new Set<RegionId>();
+  // A board order lights the road to the plant that fits its boards; a lamp schedule lights the road its boards come by.
+  const { selectedRegions, litRoads } = useMemo(() => {
+    const roads = new Set<PlantCode>();
+    const regionsOn = new Set<RegionId>();
+    if (selection?.kind === "supply") regions.forEach((r) => regionsOn.add(r.id));
+    if (selection?.kind === "plant") regionsOn.add(plantByCode[selection.code].region);
+    if (selection?.kind === "order") {
+      const order = orderById[selection.id];
+      order.route.forEach((op) => regionsOn.add(plantByCode[op.plant].region));
+      const stock = order.fills ?? (order.consumes && !order.fills ? order.consumes.stockId : undefined);
+      const to = stock ? stockById[stock].plant : undefined;
+      if (to && orders.some((o) => o.fills === stock) && to !== "BWE") {
+        roads.add(to);
+        regionsOn.add("ncr");
+        regionsOn.add(plantByCode[to].region);
+      }
+    }
+    return { selectedRegions: regionsOn, litRoads: roads };
   }, [selection]);
 
   const fly = (region: RegionId) => {
@@ -346,11 +435,9 @@ function Scene({
           document.body.style.cursor = r ? "pointer" : "";
         }}
       />
-      <SeaLane
-        highlight={!!crossingOrder || selection?.kind === "freight"}
-        focus={selection?.kind === "freight" ? selection.sailAt : undefined}
-        orderId={crossingOrder}
-      />
+      <ImportLane highlight={selection?.kind === "supply"} focus={selection?.kind === "supply" ? selection.focus : undefined} />
+      <Roads lit={litRoads} focus={selection?.kind === "supply" ? selection.focus : undefined} />
+      <ContextPins />
       {regions.map((r) => (
         <Hub key={r.id} region={r.id} active={selectedRegions.has(r.id)} onPick={fly} />
       ))}
@@ -370,7 +457,7 @@ export default function GlobeScene(props: {
     <Canvas
       dpr={[1, 1.5]}
       gl={{ antialias: true, powerPreference: "high-performance" }}
-      camera={{ position: [0, 0, GLOBE_R * 5.6], fov: 30, near: 0.5, far: 600 }}
+      camera={{ position: [0, 0, GLOBE_R * 3.4], fov: 30, near: 0.2, far: 600 }}
       onPointerMissed={() => useTwin.getState().selectNetwork(null)}
     >
       <color attach="background" args={[palette.background]} />
@@ -384,8 +471,8 @@ export default function GlobeScene(props: {
         dampingFactor={0.08}
         rotateSpeed={0.45}
         zoomSpeed={0.6}
-        minDistance={GLOBE_R * 1.5}
-        maxDistance={GLOBE_R * 11}
+        minDistance={GLOBE_R * 1.25}
+        maxDistance={GLOBE_R * 9}
       />
     </Canvas>
   );

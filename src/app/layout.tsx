@@ -3,8 +3,8 @@ import { Archivo } from "next/font/google";
 import { tenant } from "@/lib/tenant";
 import "./globals.css";
 
-// Archivo's width axis lets headings run wide like the heavy-engineering
-// signage this is built for, while body text stays at normal width.
+// Archivo's width axis lets headings run wide like plant signage, while body
+// text stays at normal width.
 const archivo = Archivo({
   variable: "--font-archivo",
   subsets: ["latin"],
@@ -13,7 +13,7 @@ const archivo = Archivo({
 
 export const metadata: Metadata = {
   title: `${tenant.product} for ${tenant.name}`,
-  description: "Live digital twin and operations view for manufacturing plants.",
+  description: "Live digital twin of Lumax Industries' lamp plants, on simulated data.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

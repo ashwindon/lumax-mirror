@@ -262,7 +262,9 @@ export function useMachineState(id: string): { status: MachineStatus; alertKind?
 // Three-segment andon tower, the way operators read machine state on a real floor.
 // A starved machine shows no light at all.
 export function StackLight({ machineId, ...props }: { machineId: string } & ThreeElements["group"]) {
-  const { status } = useMachineState(machineId);
+  const state = useMachineState(machineId);
+  // A minor stop lights amber, not red, the way andon boards separate it from a breakdown.
+  const status = state.status === "down" && state.alertKind === "minor" ? "setup" : state.status;
   return (
     <group {...props}>
       <Cyl radius={0.035} height={2.4} mat="machineDark" position={[0, 1.2, 0]} segments={8} />
@@ -304,7 +306,14 @@ export function Selectable({
   const select = useTwin((s) => s.selectMachine);
   const hover = useTwin((s) => s.hover);
 
-  const halo = status === "down" ? palette.status.down : status === "setup" || alertKind === "material" ? palette.status.setup : null;
+  const halo =
+    status === "down"
+      ? alertKind === "minor"
+        ? palette.status.setup
+        : palette.status.down
+      : status === "setup" || alertKind === "material" || alertKind === "manpower"
+        ? palette.status.setup
+        : null;
 
   return (
     <group
@@ -331,7 +340,7 @@ export function Selectable({
             size={[footprint[0] + 0.9, footprint[1] + 0.9]}
             thickness={0.28}
             color={halo ?? palette.status.down}
-            pulse={status === "down"}
+            pulse={status === "down" && alertKind !== "minor"}
             visible={!!halo}
           />
           <FloorFrame

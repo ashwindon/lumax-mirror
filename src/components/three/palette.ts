@@ -21,6 +21,10 @@ export const materialRoles = [
   "board",
   "road",
   "water",
+  "lens",
+  "lensRed",
+  "chrome",
+  "pcb",
 ] as const;
 
 export type MaterialRole = (typeof materialRoles)[number];
@@ -61,5 +65,10 @@ export const palette = {
     board: { color: "#F3F4F5", roughness: 0.95 },
     road: { color: "#D5DADE", roughness: 0.95 },
     water: { color: "#C9D6DF", roughness: 0.4 },
+    // The lamps and boards being made: the only parts of a floor with colour.
+    lens: { color: "#D6E6EE", roughness: 0.05, opacity: 0.55 },
+    lensRed: { color: "#C8423B", roughness: 0.15, opacity: 0.85 },
+    chrome: { color: "#E9EDF0", roughness: 0.12, metalness: 0.95 },
+    pcb: { color: "#2F6B4F", roughness: 0.5 },
   } satisfies Record<MaterialRole, MaterialSpec>,
 };

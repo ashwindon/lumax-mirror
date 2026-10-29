@@ -8,14 +8,11 @@ import { LabelProjector, type LabelBoard } from "@/components/three/ScreenLabels
 import { Static } from "@/components/three/kit";
 import { Stage } from "@/components/three/Stage";
 import { machinesByPlant } from "@/domain/catalog/machines";
-import type { Machine, PlantCode } from "@/domain/types";
+import type { PlantCode } from "@/domain/types";
 import { useTwin } from "@/store/twin";
 import { plantLayout, type PlantLayout } from "../layout";
-import { L06Bay } from "./Bay";
-import { GenericMachine } from "./Generic";
-import { Agv, GantryCrane, InspectionBay, LaserCutter, PaintBooth, PressBrake } from "./Machines";
+import { Agv, GenericMachine } from "./Generic";
 import { Aisle, Shed } from "./Shed";
-import { WeldCell } from "./WeldCell";
 
 const FOCUS_DISTANCE = 42;
 
@@ -49,27 +46,6 @@ function CameraRig({ layout }: { layout: PlantLayout }) {
   return null;
 }
 
-function DetailedMachine({ machine }: { machine: Machine }) {
-  switch (machine.kind) {
-    case "weld-cell":
-      return <WeldCell machine={machine} />;
-    case "laser":
-      return <LaserCutter machine={machine} />;
-    case "press-brake":
-      return <PressBrake machine={machine} />;
-    case "paint-booth":
-      return <PaintBooth machine={machine} />;
-    case "cmm":
-      return <InspectionBay machine={machine} />;
-    case "crane":
-      return <GantryCrane machine={machine} />;
-    case "agv":
-      return <Agv machine={machine} />;
-    default:
-      return null;
-  }
-}
-
 export default function PlantScene({ code, labels }: { code: PlantCode; labels: LabelBoard }) {
   const layout = useMemo(() => plantLayout(code), [code]);
   const list = machinesByPlant[code] ?? [];
@@ -78,32 +54,28 @@ export default function PlantScene({ code, labels }: { code: PlantCode; labels: 
 
   return (
     <Stage
-      camera={layout.detailed ? [33, 50, 70] : [reach * 0.42, reach * 0.62, reach * 0.85]}
-      target={layout.detailed ? [6, 0, -1] : [0, 0, 0]}
+      camera={[reach * 0.42, reach * 0.62, reach * 0.85]}
+      target={[0, 0, 0]}
       shadowExtent={Math.max(46, layout.width * 0.6)}
       minDistance={16}
       maxDistance={Math.max(110, reach * 2)}
       onPointerMissed={() => selectMachine(null)}
     >
       <Static key={code}>
-      {layout.detailed ? (
-        <>
-          <L06Bay />
-          {list.map((m) => (
-            <DetailedMachine key={m.id} machine={m} />
+        <Shed width={layout.width} depth={layout.depth} crane={false} />
+        {layout.aisles.map((z) => (
+          <Aisle key={z} length={layout.width - 4} z={z} />
+        ))}
+        {list
+          .filter((m) => layout.positions[m.id])
+          .map((m) => (
+            <GenericMachine key={m.id} machine={m} position={layout.positions[m.id]} />
           ))}
-        </>
-      ) : (
-        <>
-          <Shed width={layout.width} depth={layout.depth} crane={false} />
-          <Aisle length={layout.width - 4} z={9.5} />
-          {list
-            .filter((m) => layout.positions[m.id])
-            .map((m) => (
-              <GenericMachine key={m.id} machine={m} position={layout.positions[m.id]} />
-            ))}
-        </>
-      )}
+        {list
+          .filter((m) => m.kind === "agv")
+          .map((m) => (
+            <Agv key={m.id} machine={m} z={layout.aisles[layout.aisles.length - 1] ?? 0} span={layout.width - 12} />
+          ))}
       </Static>
       <CameraRig layout={layout} />
       <LabelProjector board={labels} />
